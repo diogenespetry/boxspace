@@ -18,7 +18,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Testes unitários
@@ -26,14 +26,14 @@ jobs:
       - name: Testes de compatibilidade (boto3)
         run: |
           cargo build --locked
-          pip install boto3 requests
+          pip install --upgrade "boto3>=1.40" requests
           python3 tests/compat_test.py target/debug/boxspace
 
   docker:
     needs: test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
 
@@ -55,7 +55,7 @@ jobs:
           docker logs bs
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9000/)" = "403"
           curl -sf http://localhost:9001/ | grep -q BoxSpace
-          pip install boto3
+          pip install --upgrade "boto3>=1.40"
           python3 - <<'EOF'
           import boto3
           s3 = boto3.client("s3", endpoint_url="http://localhost:9000", region_name="us-east-1",
