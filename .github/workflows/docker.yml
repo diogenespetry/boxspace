@@ -28,6 +28,8 @@ jobs:
           cargo build --locked
           pip install --upgrade "boto3>=1.40" requests
           python3 tests/compat_test.py target/debug/boxspace
+      - name: Testes de redundância, replicação e console
+        run: python3 tests/features_test.py target/debug/boxspace
 
   # Each architecture is built natively (no emulation), tested, and pushed by digest.
   build:
@@ -65,6 +67,8 @@ jobs:
           docker logs bs
           test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:9000/)" = "403"
           curl -sf http://localhost:9001/ | grep -q BoxSpace
+          curl -sf http://localhost:9000/_boxspace/health | grep -q '"status":"ok"'
+          docker exec bs /usr/local/bin/boxspace healthcheck
           pip install --upgrade "boto3>=1.40"
           python3 - <<'EOF'
           import boto3

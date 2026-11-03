@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use crate::{
     error::{Result, S3Error},
     ops,
-    storage::ObjectVersion,
+    storage::{ObjectVersion, Scan},
     util::{esc, iso8601},
     App,
 };
@@ -246,7 +246,7 @@ pub async fn run_once(app: &App) -> Result<(usize, usize)> {
                 Some(g) if g[0].key == v.key => g.push(v),
                 _ => groups.push(vec![v]),
             }
-            true
+            Scan::Next
         })?;
         // (key, Some(version) | None for "current")
         let mut actions: Vec<(String, Option<String>)> = Vec::new();
@@ -280,7 +280,8 @@ pub async fn run_once(app: &App) -> Result<(usize, usize)> {
         }
         actions.dedup();
         for (key, vid) in actions {
-            ops::delete_object(app, &bm, &key, vid.as_deref()).await?;
+            // Lifecycle deletions are not replicated (same as S3).
+            ops::delete_object(app, &bm, &key, vid.as_deref(), true).await?;
             expired += 1;
         }
         for u in app.store.list_uploads(&bm.name)? {

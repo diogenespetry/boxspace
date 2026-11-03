@@ -44,27 +44,37 @@ def free_port():
 
 
 class Server:
-    def __init__(self, binary):
+    def __init__(self, binary, disks=1, args=(), env=None):
+        self.binary = binary
         self.dir = tempfile.mkdtemp(prefix="boxspace-test-")
         self.port = free_port()
         self.cport = free_port()
         self.url = f"http://127.0.0.1:{self.port}"
         self.curl = f"http://127.0.0.1:{self.cport}"
-        env = dict(os.environ)
-        env.update(
+        self.disks = [os.path.join(self.dir, "data")] if disks == 1 else [os.path.join(self.dir, f"disk{i}") for i in range(disks)]
+        self.args = list(args)
+        self.env = dict(os.environ)
+        self.env.update(
             BOXSPACE_ROOT_USER=ROOT_USER,
             BOXSPACE_ROOT_PASSWORD=ROOT_PASS,
             BOXSPACE_SERVER_URL=self.url,
             BOXSPACE_LIFECYCLE_INTERVAL="1",
             BOXSPACE_LIFECYCLE_DAY_SECONDS="2",
-            RUST_LOG="warn",
+            BOXSPACE_METRICS_TOKEN="metrics-token",
+            RUST_LOG="info",
         )
-        self.log = open(os.path.join(self.dir, "server.log"), "w")
+        self.env.update(env or {})
+        self.log = open(os.path.join(self.dir, "server.log"), "a")
+        self.start()
+
+    def start(self):
         self.proc = subprocess.Popen(
-            [binary, "server", "--address", f"127.0.0.1:{self.port}", "--console-address", f"127.0.0.1:{self.cport}", os.path.join(self.dir, "data")],
-            env=env, stdout=self.log, stderr=subprocess.STDOUT,
+            [self.binary, "server", "--address", f"127.0.0.1:{self.port}", "--console-address", f"127.0.0.1:{self.cport}", *self.args, *self.disks],
+            env=self.env, stdout=self.log, stderr=subprocess.STDOUT,
         )
         for _ in range(100):
+            if self.proc.poll() is not None:
+                raise RuntimeError(f"server exited: see {self.log.name}")
             try:
                 socket.create_connection(("127.0.0.1", self.port), 0.2).close()
                 socket.create_connection(("127.0.0.1", self.cport), 0.2).close()
@@ -72,6 +82,11 @@ class Server:
             except OSError:
                 time.sleep(0.1)
         raise RuntimeError("server did not start")
+
+    def restart(self):
+        self.proc.terminate()
+        self.proc.wait(10)
+        self.start()
 
     def stop(self):
         self.proc.terminate()
@@ -409,7 +424,7 @@ def t_encryption(srv, s3):
         assert got == data[a:b + 1], (a, b)
     assert s3.head_object(Bucket="enc", Key="secret.bin")["ServerSideEncryption"] == "AES256"
     # Data on disk must not contain the plaintext.
-    blobs = os.path.join(srv.dir, "data", ".boxspace", "blobs", "enc")
+    blobs = os.path.join(srv.dir, "data", ".boxspace", "objects", "enc")
     found = False
     for root, _, files in os.walk(blobs):
         for f in files:
@@ -638,17 +653,7 @@ def t_webhooks(srv, s3):
 def t_restart(srv, s3, binary):
     """Data, keys and encryption survive a restart."""
     before = s3.get_object(Bucket="enc", Key="secret.bin")["Body"].read()
-    srv.proc.terminate()
-    srv.proc.wait(10)
-    env = dict(os.environ, BOXSPACE_ROOT_USER=ROOT_USER, BOXSPACE_ROOT_PASSWORD=ROOT_PASS, BOXSPACE_SERVER_URL=srv.url, RUST_LOG="warn")
-    srv.proc = subprocess.Popen([binary, "server", "--address", f"127.0.0.1:{srv.port}", "--console-address", f"127.0.0.1:{srv.cport}",
-                                 os.path.join(srv.dir, "data")], env=env, stdout=srv.log, stderr=subprocess.STDOUT)
-    for _ in range(100):
-        try:
-            socket.create_connection(("127.0.0.1", srv.port), 0.2).close()
-            break
-        except OSError:
-            time.sleep(0.1)
+    srv.restart()
     assert s3.get_object(Bucket="enc", Key="secret.bin")["Body"].read() == before
     assert s3.get_bucket_versioning(Bucket="ver")["Status"] == "Suspended"
 

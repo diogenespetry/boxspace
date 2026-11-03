@@ -39,8 +39,7 @@ h3 { font-size: 1rem; }
 .small { font-size: .85rem; }
 [hidden] { display: none !important; }
 
-/* buttons */
-.btn { display: inline-flex; align-items: center; gap: .4em; border: 1px solid var(--line); background: var(--surface); padding: .45em .9em; border-radius: var(--r); cursor: pointer; white-space: nowrap; }
+.btn { display: inline-flex; align-items: center; gap: .4em; border: 1px solid var(--line); background: var(--surface); padding: .45em .9em; border-radius: var(--r); cursor: pointer; white-space: nowrap; text-decoration: none; color: var(--ink); }
 .btn:hover { border-color: var(--ink-3); }
 .btn.primary { background: var(--steel); border-color: var(--steel); color: #fff; }
 .btn.primary:hover { background: var(--steel-deep); }
@@ -48,21 +47,22 @@ h3 { font-size: 1rem; }
 .btn.danger.solid { background: var(--danger); border-color: var(--danger); color: #fff; }
 .btn.link { border: 0; background: none; padding: .2em .35em; color: var(--steel); }
 .btn.link:hover { text-decoration: underline; }
+.btn.small { padding: .25em .6em; font-size: .88rem; }
 .btn[disabled] { opacity: .5; cursor: default; }
 .icon { width: 1.1em; height: 1.1em; flex: none; }
 
-/* login */
 .login { min-height: 100%; display: grid; place-items: center; padding: 24px; background: var(--steel); }
 .login form { width: min(380px, 100%); background: var(--surface); border-radius: 10px; padding: 32px; box-shadow: 0 20px 50px rgba(10, 30, 45, .35); }
 .login .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
 .login .brand h1 { font-size: 1.8rem; }
 .field { display: grid; gap: 4px; margin-bottom: 14px; }
 .field label { font-size: .85rem; color: var(--ink-2); }
-.field input, .field select, .field textarea { border: 1px solid var(--line); border-radius: var(--r); padding: .55em .7em; background: #fff; width: 100%; }
+.field input, .field select, .field textarea, input.text { border: 1px solid var(--line); border-radius: var(--r); padding: .55em .7em; background: #fff; width: 100%; }
 .field textarea { font-family: var(--mono); font-size: .85rem; min-height: 220px; resize: vertical; }
+.check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 12px; }
+.check input { margin-top: 4px; }
 .err { color: var(--danger); font-size: .9rem; min-height: 1.4em; }
 
-/* shell */
 .shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100%; }
 .rail { background: var(--steel); color: #fff; display: flex; flex-direction: column; padding: 18px 12px; position: sticky; top: 0; height: 100vh; align-self: start; }
 .rail .brand { display: flex; align-items: center; gap: 9px; padding: 4px 8px 22px; }
@@ -76,10 +76,11 @@ h3 { font-size: 1rem; }
 .rail .who .btn { margin-top: 8px; color: #fff; background: transparent; border-color: rgba(255,255,255,.3); }
 main { padding: 26px 32px 60px; min-width: 0; }
 .head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
-.head .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.head .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .banner { background: #FFF4CC; border: 1px solid #E8CF70; border-radius: var(--r); padding: 10px 14px; margin-bottom: 18px; font-size: .92rem; }
+.banner.bad { background: #FBE4E1; border-color: #E5A39B; }
+.note { font-size: .9rem; color: var(--ink-2); margin: 12px 0 0; }
 
-/* path: the floor marking */
 .path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; font-family: var(--display); font-size: 1.45rem; font-weight: 600; padding-bottom: 6px; border-bottom: 4px solid var(--mark); width: fit-content; max-width: 100%; }
 .path a { text-decoration: none; color: var(--ink-2); padding: 0 2px; border-radius: 3px; }
 .path a:hover { color: var(--steel); }
@@ -89,71 +90,86 @@ main { padding: 26px 32px 60px; min-width: 0; }
 .tabs a { padding: 8px 14px; text-decoration: none; color: var(--ink-2); border-bottom: 3px solid transparent; margin-bottom: -1px; }
 .tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--steel); font-weight: 600; }
 
-/* tables */
+.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 16px 0 10px; }
+.toolbar form { display: flex; gap: 6px; flex: 1 1 260px; max-width: 420px; }
+.bulk { display: flex; gap: 8px; align-items: center; background: var(--steel-soft); border-radius: var(--r); padding: 6px 10px; flex-wrap: wrap; }
+.bulk b { font-weight: 600; margin-right: 4px; }
+
 .panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 table { width: 100%; border-collapse: collapse; }
 th { text-align: left; font-weight: 600; font-size: .82rem; color: var(--ink-2); padding: 10px 14px; border-bottom: 1px solid var(--line); background: #F7F9FA; }
 td { padding: 9px 14px; border-bottom: 1px solid #EBEEF1; vertical-align: middle; }
 tr:last-child td { border-bottom: 0; }
 tbody tr:hover { background: #F5F8FA; }
+tbody tr.sel { background: #FFF8DB; }
 td.r, th.r { text-align: right; }
+td.cb, th.cb { width: 36px; padding-right: 0; }
 td.name { word-break: break-all; }
 td.name a { text-decoration: none; color: var(--ink); font-weight: 500; display: inline-flex; gap: 8px; align-items: center; }
 td.name a:hover { color: var(--steel); text-decoration: underline; }
 .row-actions { display: flex; gap: 2px; justify-content: flex-end; }
 .tag { display: inline-block; font-size: .78rem; padding: 1px 8px; border-radius: 99px; background: var(--steel-soft); color: var(--steel-deep); margin-right: 4px; white-space: nowrap; }
 .tag.warn { background: #FFF1C2; color: #6A5000; }
+.tag.bad { background: #FBE4E1; color: #8A2219; }
+.tag.good { background: #DDF1E4; color: #1F5A37; }
 .empty { padding: 48px 20px; text-align: center; color: var(--ink-2); }
 .empty h3 { color: var(--ink); margin-bottom: 6px; }
 .dropping .panel { outline: 3px dashed var(--steel); outline-offset: -3px; }
 .more { padding: 12px; text-align: center; border-top: 1px solid var(--line); }
 
-/* settings */
 .section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 22px; margin-top: 16px; }
-.section > p { margin: 4px 0 14px; color: var(--ink-2); max-width: 70ch; }
+.section > p { margin: 4px 0 14px; color: var(--ink-2); max-width: 72ch; }
 .switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
 .switch input { width: 40px; height: 22px; appearance: none; background: #C7CFD6; border-radius: 99px; position: relative; cursor: pointer; transition: background .15s; flex: none; }
 .switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
 .switch input:checked { background: var(--steel); }
 .switch input:checked::after { transform: translateX(18px); }
+.switch input:disabled { opacity: .5; cursor: default; }
 .radios { display: grid; gap: 8px; margin-bottom: 12px; }
 .radios label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .radios input { margin-top: 4px; }
 .grid-rows { display: grid; gap: 8px; margin-bottom: 12px; }
-.rule { display: grid; grid-template-columns: 1.4fr repeat(3, .8fr) auto auto; gap: 8px; align-items: end; padding: 10px; background: #F7F9FA; border-radius: var(--r); }
-.hook { display: grid; grid-template-columns: 2fr 1.2fr .8fr .8fr auto; gap: 8px; align-items: end; padding: 10px; background: #F7F9FA; border-radius: var(--r); }
-.rule .field, .hook .field { margin: 0; }
-.rule input, .hook input, .hook select { padding: .4em .55em; }
+.row-box { display: grid; gap: 8px; align-items: end; padding: 10px; background: #F7F9FA; border-radius: var(--r); }
+.rule { grid-template-columns: 1.4fr repeat(3, .8fr) auto auto; }
+.hook { grid-template-columns: 2fr 1.2fr .8fr .8fr auto; }
+.target { grid-template-columns: 1.6fr 1fr .7fr 1fr 1fr; }
+.target .opts { grid-column: 1 / -1; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.grant { grid-template-columns: 1fr 180px auto; }
+.row-box .field { margin: 0; }
+.row-box input, .row-box select { padding: .4em .55em; }
 
-/* stats on about page */
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
 .stats div { padding: 16px 20px; border-right: 1px solid var(--line); }
 .stats div:last-child { border-right: 0; }
 .stats b { display: block; font-family: var(--display); font-size: 1.7rem; font-weight: 600; }
+.meter { height: 6px; background: #E3E8EC; border-radius: 3px; overflow: hidden; min-width: 120px; }
+.meter i { display: block; height: 100%; background: var(--steel); }
 pre { background: #F3F5F7; border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; overflow: auto; font: .85rem/1.5 var(--mono); }
-code { font-family: var(--mono); font-size: .9em; }
+code { font-family: var(--mono); font-size: .9em; word-break: break-all; }
 
-/* drawer */
-.drawer { position: fixed; inset: 0 0 0 auto; width: min(460px, 100%); background: var(--surface); border-left: 1px solid var(--line); transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s; z-index: 20; display: flex; flex-direction: column; }
+.drawer { position: fixed; inset: 0 0 0 auto; width: min(520px, 100%); background: var(--surface); border-left: 1px solid var(--line); transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s; z-index: 20; display: flex; flex-direction: column; }
 .drawer.open { transform: none; visibility: visible; box-shadow: -12px 0 30px rgba(10,30,45,.12); transition: transform .2s ease; }
 .drawer header { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .drawer header h2 { word-break: break-all; }
 .drawer .body { padding: 18px 20px; overflow: auto; flex: 1; }
+.preview { margin-bottom: 16px; border: 1px solid var(--line); border-radius: var(--r); background: #F7F9FA; overflow: hidden; }
+.preview img, .preview video { display: block; max-width: 100%; max-height: 320px; margin: 0 auto; }
+.preview iframe { display: block; width: 100%; height: 380px; border: 0; background: #fff; }
+.preview audio { display: block; width: 100%; }
+.preview pre { margin: 0; border: 0; max-height: 300px; white-space: pre-wrap; word-break: break-word; }
 dl.kv { display: grid; grid-template-columns: 9em 1fr; gap: 6px 12px; margin: 0 0 18px; font-size: .92rem; }
 dl.kv dt { color: var(--ink-2); }
 dl.kv dd { margin: 0; word-break: break-all; }
 .versions li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #EBEEF1; font-size: .9rem; }
 .versions { list-style: none; padding: 0; margin: 8px 0 0; }
 
-/* dialogs */
-dialog { border: 0; border-radius: 10px; padding: 0; width: min(480px, calc(100% - 32px)); box-shadow: 0 24px 60px rgba(10,30,45,.3); }
+dialog { border: 0; border-radius: 10px; padding: 0; width: min(560px, calc(100% - 32px)); box-shadow: 0 24px 60px rgba(10,30,45,.3); }
 dialog::backdrop { background: rgba(20, 35, 48, .45); }
-dialog form { padding: 22px 24px; }
+dialog form { padding: 22px 24px; max-height: calc(100vh - 60px); overflow: auto; }
 dialog h2 { margin-bottom: 12px; }
 dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
 .secret { font-family: var(--mono); background: #F3F5F7; border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; word-break: break-all; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
 
-/* uploads + toasts */
 .uploads { position: fixed; right: 20px; bottom: 20px; width: min(360px, calc(100% - 40px)); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 30px rgba(10,30,45,.18); z-index: 30; }
 .uploads header { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
 .uploads ul { list-style: none; margin: 0; padding: 6px 14px 10px; max-height: 240px; overflow: auto; }
@@ -169,20 +185,21 @@ dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1
   .shell { grid-template-columns: 1fr; }
   .rail { position: static; height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
   .rail .brand { padding: 0 8px 0 0; }
-  .rail nav { display: flex; }
+  .rail nav { display: flex; flex-wrap: wrap; }
   .rail .who { margin: 0 0 0 auto; border: 0; padding: 0; display: flex; gap: 8px; align-items: center; }
   .rail .who strong { display: none; }
   .rail .who .btn { margin: 0; }
   main { padding: 18px 14px 60px; }
   .hide-sm { display: none; }
   .panel thead { display: none; }
-  .panel tbody tr { display: grid; grid-template-columns: 1fr auto; align-items: center; border-bottom: 1px solid #EBEEF1; padding: 4px 0; }
+  .panel tbody tr { display: grid; grid-template-columns: auto 1fr auto; align-items: center; border-bottom: 1px solid #EBEEF1; padding: 4px 0; }
   .panel tbody tr:last-child { border-bottom: 0; }
-  .panel td { border: 0; padding: 4px 14px; }
-  .panel td.name { grid-column: 1 / -1; }
+  .panel td { border: 0; padding: 4px 10px; }
+  .panel td.name { grid-column: 2 / -1; }
+  .panel td.cb { grid-row: span 2; }
   .panel td.r { text-align: left; }
   .row-actions { justify-content: flex-end; flex-wrap: wrap; }
-  .rule, .hook { grid-template-columns: 1fr 1fr; }
+  .rule, .hook, .target, .grant { grid-template-columns: 1fr 1fr; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -199,6 +216,8 @@ dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1
   <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="m11 12 8-8m-3 3 2 2m-4 0 2 2"/></symbol>
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path stroke="currentColor" stroke-width="1.8" d="M12 11v6M12 7.5v.5"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-disk" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 14h18M7 17h.01"/></symbol>
 </svg>
 
 <script>
@@ -208,16 +227,18 @@ const $$ = (s, el = document) => [...el.querySelectorAll(s)];
 const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const icon = n => `<svg class="icon" aria-hidden="true"><use href="#i-${n}"/></svg>`;
 const enc = encodeURIComponent;
-const state = { me: null, info: null };
+const state = { me: null };
+let pollTimer;
 
 function size(n) {
   if (n == null) return "";
   const u = ["B", "KB", "MB", "GB", "TB", "PB"];
-  let i = 0; let v = n;
+  let i = 0; let v = Number(n);
   while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
   return (i === 0 ? v : v.toFixed(v < 10 ? 1 : 0)).toLocaleString("pt-BR") + " " + u[i];
 }
 const when = d => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
+const whenFull = d => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" }) : "";
 
 async function api(method, path, body, opts = {}) {
   const init = { method, headers: { "x-boxspace-csrf": "1" }, credentials: "same-origin" };
@@ -244,11 +265,12 @@ function toast(msg, bad = false) {
 const fail = e => toast(e.message || String(e), true);
 
 /* ---------- dialogs ---------- */
-function dialog(html, onSubmit) {
+function dialog(html, onSubmit, onOpen) {
   const d = $("#dlg"), f = $("#dlg-form");
   f.innerHTML = html;
   d.showModal();
-  $("input, textarea, select, button.primary", f)?.focus();
+  onOpen?.(f);
+  $("input:not([type=checkbox]):not([type=radio]), textarea, select, button.primary", f)?.focus();
   return new Promise(resolve => {
     f.onsubmit = async ev => {
       const btn = ev.submitter;
@@ -256,7 +278,7 @@ function dialog(html, onSubmit) {
       ev.preventDefault();
       try {
         btn.disabled = true;
-        const res = onSubmit ? await onSubmit(new FormData(f)) : true;
+        const res = onSubmit ? await onSubmit(new FormData(f), f) : true;
         if (res !== false) { d.close(); resolve(res); }
       } catch (e) { const er = $(".err", f); if (er) er.textContent = e.message; else fail(e); }
       finally { btn.disabled = false; }
@@ -294,7 +316,9 @@ function loginView() {
 
 /* ---------- shell ---------- */
 function shell(active, inner) {
-  const nav = [["buckets", "Buckets", "box"], ...(state.me.root ? [["keys", "Chaves de acesso", "key"]] : []), ["about", "Servidor", "info"]];
+  const nav = [["buckets", "Buckets", "box"],
+    ...(state.me.root ? [["keys", "Chaves de acesso", "key"], ["audit", "Auditoria", "list"]] : []),
+    ...(state.me.admin ? [["server", "Servidor", "disk"]] : [["about", "Conectar", "info"]])];
   return `<div class="shell">
     <aside class="rail">
       <div class="brand"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="19" rx="2" fill="#fff"/><rect x="3" y="7" width="26" height="5" fill="#F2C230"/></svg><span>BoxSpace</span></div>
@@ -315,6 +339,7 @@ function parseHash() {
 }
 
 async function render() {
+  clearTimeout(pollTimer);
   if (!state.me) {
     try { state.me = await api("GET", "/api/session", undefined, { allow401: true }); }
     catch { return loginView(); }
@@ -322,8 +347,10 @@ async function render() {
   const { parts, q } = parseHash();
   const [view, bucket, sub] = parts;
   try {
-    if (view === "b" && bucket) return sub === "settings" ? await settingsView(bucket) : await browserView(bucket, q.get("prefix") || "");
+    if (view === "b" && bucket) return sub === "settings" ? await settingsView(bucket) : await browserView(bucket, q.get("prefix") || "", q.get("q") || "");
     if (view === "keys" && state.me.root) return await keysView();
+    if (view === "audit" && state.me.root) return await auditView(q);
+    if (view === "server" && state.me.admin) return await serverView();
     if (view === "about") return await aboutView();
     return await bucketsView();
   } catch (e) { fail(e); }
@@ -337,25 +364,28 @@ document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeDrawe
 /* ---------- buckets ---------- */
 async function bucketsView() {
   const [buckets, info] = await Promise.all([api("GET", "/api/buckets"), api("GET", "/api/info")]);
-  state.info = info;
-  const ro = state.me.readOnly;
+  const admin = state.me.admin;
   const rows = buckets.map(b => `<tr>
       <td class="name"><a href="#/b/${enc(b.name)}">${icon("box")}${esc(b.name)}</a></td>
       <td class="r num">${b.objects.toLocaleString("pt-BR")}</td>
       <td class="r num">${size(b.bytes)}</td>
-      <td class="hide-sm">${b.public ? '<span class="tag warn">Público</span>' : ""}${b.versioning === "Enabled" ? '<span class="tag">Versionado</span>' : ""}${b.encryption ? '<span class="tag">Criptografado</span>' : ""}</td>
+      <td class="hide-sm">${b.public ? '<span class="tag warn">Público</span>' : ""}${b.versioning === "Enabled" ? '<span class="tag">Versionado</span>' : ""}${b.encryption ? '<span class="tag">Criptografado</span>' : ""}${b.readable ? '<span class="tag good">Arquivos legíveis</span>' : ""}${b.replicated ? '<span class="tag">Replicado</span>' : ""}${b.writable ? "" : '<span class="tag warn">Só leitura</span>'}</td>
       <td class="hide-sm muted num">${when(b.created)}</td>
-      <td><div class="row-actions"><a class="btn link" href="#/b/${enc(b.name)}/settings">Configurar</a>${ro ? "" : `<button class="btn link danger" data-del="${esc(b.name)}" data-count="${b.objects}">Excluir</button>`}</div></td>
+      <td><div class="row-actions"><a class="btn link" href="#/b/${enc(b.name)}/settings">Configurar</a>${admin ? `<button class="btn link danger" data-del="${esc(b.name)}" data-count="${b.objects}">Excluir</button>` : ""}</div></td>
     </tr>`).join("");
   $("#app").innerHTML = shell("buckets", `
     ${info.defaultCredentials ? '<div class="banner">O servidor está usando as credenciais padrão. Defina <code>BOXSPACE_ROOT_USER</code> e <code>BOXSPACE_ROOT_PASSWORD</code> antes de expor o BoxSpace na rede.</div>' : ""}
-    <div class="head"><h1>Buckets</h1><div class="actions">${ro ? "" : '<button class="btn primary" id="new-bucket">Criar bucket</button>'}</div></div>
+    ${admin && info.disksOnline < info.disks ? `<div class="banner bad">${info.disks - info.disksOnline} de ${info.disks} disco(s) estão offline. <a href="#/server">Ver discos</a></div>` : ""}
+    ${admin && info.lost > 0 ? `<div class="banner bad">A última verificação encontrou ${info.lost} objeto(s) que não podem ser reconstruídos. <a href="#/server">Ver detalhes</a></div>` : ""}
+    <div class="head"><h1>Buckets</h1><div class="actions">${admin ? '<button class="btn primary" id="new-bucket">Criar bucket</button>' : ""}</div></div>
     <div class="panel">${buckets.length ? `<table><thead><tr><th>Nome</th><th class="r">Objetos</th><th class="r">Tamanho</th><th class="hide-sm">Recursos</th><th class="hide-sm">Criado em</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
-      : `<div class="empty"><h3>Nenhum bucket ainda</h3><p>Um bucket guarda seus arquivos. Crie o primeiro para começar a enviar dados.</p>${ro ? "" : '<button class="btn primary" id="new-bucket-2">Criar bucket</button>'}</div>`}</div>`);
+      : `<div class="empty"><h3>Nenhum bucket ${admin ? "ainda" : "disponível para esta chave"}</h3><p>${admin ? "Um bucket guarda seus arquivos. Crie o primeiro para começar a enviar dados." : "Peça ao administrador acesso a um bucket."}</p>${admin ? '<button class="btn primary" id="new-bucket-2">Criar bucket</button>' : ""}</div>`}</div>`);
   const create = () => dialog(`<h2>Criar bucket</h2>
       <div class="field"><label for="bn">Nome</label><input id="bn" name="name" required pattern="[a-z0-9][a-z0-9.\\-]{1,61}[a-z0-9]" placeholder="meus-arquivos"></div>
-      <p class="muted small">De 3 a 63 caracteres: letras minúsculas, números, pontos e hífens.</p>${foot("Criar bucket")}`,
-    async f => { await api("POST", "/api/buckets", { name: f.get("name") }); toast("Bucket criado."); location.hash = `#/b/${enc(f.get("name"))}`; });
+      <p class="muted small" style="margin-top:-6px">De 3 a 63 caracteres: letras minúsculas, números, pontos e hífens.</p>
+      <label class="check"><input type="checkbox" name="readable"><span><b>Arquivos legíveis no disco</b><br><span class="muted small">Cada arquivo também aparece com o nome real na pasta de dados do servidor, para abrir e copiar sem o BoxSpace. Não pode ser usado com criptografia.</span></span></label>
+      ${foot("Criar bucket")}`,
+    async f => { await api("POST", "/api/buckets", { name: f.get("name"), readable: f.get("readable") === "on" }); toast("Bucket criado."); location.hash = `#/b/${enc(f.get("name"))}`; });
   $("#new-bucket")?.addEventListener("click", create);
   $("#new-bucket-2")?.addEventListener("click", create);
   $$("[data-del]").forEach(b => b.onclick = async () => {
@@ -383,37 +413,109 @@ function bucketTabs(bucket, active) {
   return `<nav class="tabs"><a href="#/b/${enc(bucket)}" ${active === "files" ? 'aria-current="page"' : ""}>Arquivos</a><a href="#/b/${enc(bucket)}/settings" ${active === "settings" ? 'aria-current="page"' : ""}>Configurações</a></nav>`;
 }
 
-async function browserView(bucket, prefix, token = "", append = false) {
-  const data = await api("GET", `/api/buckets/${enc(bucket)}/objects?prefix=${enc(prefix)}&token=${enc(token)}`);
-  const ro = state.me.readOnly;
-  const rowsHtml = [
-    ...data.prefixes.map(p => `<tr>
+const selection = { keys: new Set(), prefixes: new Set() };
+
+function rowHtml(bucket, prefix, item, writable, flat) {
+  if (item.prefix) {
+    const p = item.prefix;
+    return `<tr data-p="${esc(p)}">
+      <td class="cb"><input type="checkbox" aria-label="Selecionar ${esc(p)}" data-selp="${esc(p)}"></td>
       <td class="name"><a href="#/b/${enc(bucket)}?prefix=${enc(p)}">${icon("folder")}${esc(p.slice(prefix.length))}</a></td>
       <td class="r muted">Pasta</td><td class="hide-sm"></td>
-      <td><div class="row-actions">${ro ? "" : `<button class="btn link danger" data-delprefix="${esc(p)}">Excluir</button>`}</div></td></tr>`),
-    ...data.objects.filter(o => o.key !== prefix).map(o => `<tr>
-      <td class="name"><a href="#" data-info="${esc(o.key)}">${icon("file")}${esc(o.key.slice(prefix.length))}</a>${o.encrypted ? ` <span title="Criptografado" class="muted">${icon("lock")}</span>` : ""}</td>
-      <td class="r num">${size(o.size)}</td>
-      <td class="hide-sm muted num">${when(o.lastModified)}</td>
-      <td><div class="row-actions"><a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(o.key)}">Baixar</a><button class="btn link" data-share="${esc(o.key)}">Compartilhar</button>${ro ? "" : `<button class="btn link danger" data-delkey="${esc(o.key)}">Excluir</button>`}</div></td></tr>`),
-  ].join("");
-  const more = data.nextToken ? `<div class="more"><button class="btn" id="more">Carregar mais</button></div>` : "";
+      <td><div class="row-actions">${writable ? `<button class="btn link danger" data-delprefix="${esc(p)}">Excluir</button>` : ""}</div></td></tr>`;
+  }
+  const o = item;
+  const shown = flat ? o.key : o.key.slice(prefix.length);
+  return `<tr data-k="${esc(o.key)}">
+    <td class="cb"><input type="checkbox" aria-label="Selecionar ${esc(o.key)}" data-selk="${esc(o.key)}"></td>
+    <td class="name"><a href="#" data-info="${esc(o.key)}">${icon("file")}${esc(shown)}</a>${o.encrypted ? ` <span title="Criptografado" class="muted">${icon("lock")}</span>` : ""}</td>
+    <td class="r num">${size(o.size)}</td>
+    <td class="hide-sm muted num">${when(o.lastModified)}</td>
+    <td><div class="row-actions"><a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(o.key)}">Baixar</a><button class="btn link" data-share="${esc(o.key)}">Compartilhar</button>${writable ? `<button class="btn link danger" data-delkey="${esc(o.key)}">Excluir</button>` : ""}</div></td></tr>`;
+}
+
+function updateBulk(bucket, writable) {
+  const n = selection.keys.size + selection.prefixes.size;
+  const bar = $("#bulk");
+  if (!bar) return;
+  bar.hidden = n === 0;
+  bar.innerHTML = `<b>${n} selecionado(s)</b><button class="btn small" id="bulk-zip">Baixar em ZIP</button>${writable ? '<button class="btn small danger" id="bulk-del">Excluir</button>' : ""}<button class="btn link small" id="bulk-clear">Limpar seleção</button>`;
+  $$("tr[data-k], tr[data-p]").forEach(tr => tr.classList.toggle("sel", selection.keys.has(tr.dataset.k) || selection.prefixes.has(tr.dataset.p)));
+  $("#bulk-clear").onclick = () => { selection.keys.clear(); selection.prefixes.clear(); $$("[data-selk], [data-selp], #sel-all").forEach(c => c.checked = false); updateBulk(bucket, writable); };
+  $("#bulk-zip").onclick = async () => {
+    try {
+      const r = await api("POST", `/api/buckets/${enc(bucket)}/zip`, { keys: [...selection.keys], prefixes: [...selection.prefixes] });
+      const a = document.createElement("a"); a.href = `/api/zip/${r.token}`; document.body.append(a); a.click(); a.remove();
+      toast("Preparando o download.");
+    } catch (e) { fail(e); }
+  };
+  $("#bulk-del")?.addEventListener("click", async () => {
+    const parts = [];
+    if (selection.keys.size) parts.push(`${selection.keys.size} arquivo(s)`);
+    if (selection.prefixes.size) parts.push(`${selection.prefixes.size} pasta(s) com todo o conteúdo`);
+    if (!await confirmDlg("Excluir seleção", `Serão excluídos ${parts.join(" e ")}.`, "Excluir")) return;
+    try {
+      const r = await api("POST", `/api/buckets/${enc(bucket)}/bulk-delete`, { keys: [...selection.keys], prefixes: [...selection.prefixes] });
+      selection.keys.clear(); selection.prefixes.clear();
+      toast(`${r.deleted} arquivo(s) excluído(s).`); render();
+    } catch (e) { fail(e); }
+  });
+}
+
+async function browserView(bucket, prefix, query, token = "", append = false) {
+  const [data, b] = await Promise.all([
+    query ? api("GET", `/api/buckets/${enc(bucket)}/search?q=${enc(query)}&prefix=${enc(prefix)}`)
+          : api("GET", `/api/buckets/${enc(bucket)}/objects?prefix=${enc(prefix)}&token=${enc(token)}`),
+    append ? Promise.resolve(null) : api("GET", `/api/buckets/${enc(bucket)}`),
+  ]);
+  if (b) state.bucket = b;
+  const writable = state.bucket.canWrite;
+  const items = query ? data.objects : [...data.prefixes.map(p => ({ prefix: p })), ...data.objects.filter(o => o.key !== prefix)];
+  const rowsHtml = items.map(i => rowHtml(bucket, prefix, i, writable, !!query)).join("");
+  const more = !query && data.nextToken ? `<div class="more"><button class="btn" id="more">Carregar mais</button></div>` : "";
 
   if (append) {
     $("#rows").insertAdjacentHTML("beforeend", rowsHtml);
     $(".more")?.remove();
     $(".panel").insertAdjacentHTML("beforeend", more);
   } else {
+    selection.keys.clear(); selection.prefixes.clear();
     const empty = !rowsHtml;
+    const emptyMsg = query ? `<h3>Nada encontrado</h3><p>Nenhum arquivo ${prefix ? "nesta pasta " : ""}tem “${esc(query)}” no nome.</p>`
+      : `<h3>${prefix ? "Esta pasta está vazia" : "Este bucket está vazio"}</h3><p>${writable ? "Arraste arquivos para cá ou use <b>Enviar arquivos</b>." : "Não há arquivos aqui."}</p>`;
     $("#app").innerHTML = shell("buckets", `
-      <div class="head">${pathHtml(bucket, prefix)}<div class="actions">${ro ? "" : `<button class="btn" id="new-folder">Nova pasta</button><label class="btn primary" for="file-input">Enviar arquivos</label><input type="file" id="file-input" multiple hidden>`}</div></div>
+      <div class="head">${pathHtml(bucket, prefix)}<div class="actions">${writable ? `<button class="btn" id="new-folder">Nova pasta</button><label class="btn primary" for="file-input">Enviar arquivos</label><input type="file" id="file-input" multiple hidden>` : ""}</div></div>
       ${bucketTabs(bucket, "files")}
-      <div id="drop" style="margin-top:16px"><div class="panel">${empty
-        ? `<div class="empty"><h3>${prefix ? "Esta pasta está vazia" : "Este bucket está vazio"}</h3><p>${ro ? "Não há arquivos aqui." : "Arraste arquivos para cá ou use <b>Enviar arquivos</b>."}</p></div>`
-        : `<table><thead><tr><th>Nome</th><th class="r">Tamanho</th><th class="hide-sm">Modificado em</th><th></th></tr></thead><tbody id="rows">${rowsHtml}</tbody></table>`}${more}</div></div>`);
-    if (!ro) wireUploads(bucket, prefix);
+      ${state.bucket.readable ? `<p class="note">Arquivos legíveis no disco em <code>${esc(state.bucket.readablePath)}</code></p>` : ""}
+      <div class="toolbar">
+        <form id="search" role="search"><input class="text" name="q" type="search" placeholder="Buscar por nome${prefix ? " nesta pasta" : ""}" value="${esc(query)}" aria-label="Buscar"><button class="btn">Buscar</button></form>
+        ${query ? `<a class="btn link" href="#/b/${enc(bucket)}${prefix ? `?prefix=${enc(prefix)}` : ""}">Limpar busca</a><span class="muted small">${data.objects.length}${data.truncated ? "+" : ""} resultado(s)</span>` : ""}
+        <div class="bulk" id="bulk" hidden></div>
+      </div>
+      <div id="drop"><div class="panel">${empty ? `<div class="empty">${emptyMsg}</div>`
+        : `<table><thead><tr><th class="cb"><input type="checkbox" id="sel-all" aria-label="Selecionar tudo"></th><th>Nome</th><th class="r">Tamanho</th><th class="hide-sm">Modificado em</th><th></th></tr></thead><tbody id="rows">${rowsHtml}</tbody></table>`}${more}</div></div>`);
+    if (writable) wireUploads(bucket, prefix);
+    $("#search").onsubmit = ev => {
+      ev.preventDefault();
+      const v = new FormData(ev.target).get("q").trim();
+      const qs = new URLSearchParams(); if (prefix) qs.set("prefix", prefix); if (v) qs.set("q", v);
+      location.hash = `#/b/${enc(bucket)}${qs.toString() ? "?" + qs : ""}`;
+    };
+    $("#sel-all")?.addEventListener("change", ev => {
+      $$("[data-selk], [data-selp]").forEach(c => { c.checked = ev.target.checked; c.dispatchEvent(new Event("change")); });
+    });
   }
-  $("#more")?.addEventListener("click", () => browserView(bucket, prefix, data.nextToken, true).catch(fail));
+  $$("[data-selk]:not([data-wired]), [data-selp]:not([data-wired])").forEach(c => {
+    c.dataset.wired = "1";
+    c.onchange = () => {
+      const set = c.dataset.selk != null ? selection.keys : selection.prefixes;
+      const v = c.dataset.selk ?? c.dataset.selp;
+      c.checked ? set.add(v) : set.delete(v);
+      updateBulk(bucket, writable);
+    };
+  });
+  updateBulk(bucket, writable);
+  $("#more")?.addEventListener("click", () => browserView(bucket, prefix, "", data.nextToken, true).catch(fail));
   $$("[data-info]").forEach(a => a.onclick = ev => { ev.preventDefault(); objectDrawer(bucket, a.dataset.info).catch(fail); });
   $$("[data-share]").forEach(b => b.onclick = () => shareDialog(bucket, b.dataset.share));
   $$("[data-delkey]").forEach(b => b.onclick = async () => {
@@ -488,7 +590,7 @@ function upload(bucket, prefix, files) {
       li.classList.add(ok ? "done" : "failed");
       $("i", li).style.width = "100%";
       if (!ok) { let m = "falhou"; try { m = JSON.parse(xhr.responseText).error; } catch {} li.insertAdjacentHTML("beforeend", `<div class="err">${esc(m)}</div>`); }
-      if (--pending === 0) { toast(`Envio concluído.`); const h = parseHash(); if (h.parts[0] === "b" && h.parts[1] === bucket) render(); }
+      if (--pending === 0) { toast("Envio concluído."); const h = parseHash(); if (h.parts[0] === "b" && h.parts[1] === bucket) render(); }
       next();
     };
     xhr.send(file);
@@ -511,31 +613,47 @@ function shareDialog(bucket, key) {
 }
 
 /* ---------- object drawer ---------- */
-function closeDrawer() { const d = $("#drawer"); if (d) { d.classList.remove("open"); d.setAttribute("aria-hidden", "true"); } }
+function closeDrawer() { const d = $("#drawer"); if (d) { d.classList.remove("open"); d.setAttribute("aria-hidden", "true"); d.innerHTML = ""; } }
+
+function previewHtml(bucket, o) {
+  const url = `/api/buckets/${enc(bucket)}/download?key=${enc(o.key)}&inline=1`;
+  const t = (o.contentType || "").toLowerCase();
+  if (/^image\/(png|jpe?g|gif|webp|avif|svg\+xml)/.test(t)) return `<div class="preview"><img src="${url}" alt="Pré-visualização de ${esc(o.key)}"></div>`;
+  if (t.startsWith("application/pdf")) return `<div class="preview"><iframe src="${url}" title="Pré-visualização do PDF"></iframe></div>`;
+  if (/^video\/(mp4|webm)/.test(t)) return `<div class="preview"><video src="${url}" controls preload="metadata"></video></div>`;
+  if (/^audio\/(mpeg|ogg|wav|x-wav)/.test(t)) return `<div class="preview"><audio src="${url}" controls preload="metadata"></audio></div>`;
+  if ((t.startsWith("text/") || t === "application/json" || t === "application/xml") && o.size <= 2 * 1024 * 1024) return `<div class="preview"><pre id="text-preview">Carregando…</pre></div>`;
+  return "";
+}
 
 async function objectDrawer(bucket, key) {
   const o = await api("GET", `/api/buckets/${enc(bucket)}/object?key=${enc(key)}`);
-  const ro = state.me.readOnly;
-  const kv = (rows) => `<dl class="kv">${rows.filter(r => r[1] !== "" && r[1] != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
+  const writable = state.bucket?.canWrite;
+  const kv = rows => `<dl class="kv">${rows.filter(r => r[1] !== "" && r[1] != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
   const meta = Object.entries(o.meta || {});
   const versioned = o.versions.length > 1 || o.versionId !== "null";
   const d = $("#drawer");
   d.innerHTML = `<header><h2>${esc(key.split("/").pop() || key)}</h2><button class="btn link" id="close-drawer">Fechar</button></header>
     <div class="body">
+      ${previewHtml(bucket, o)}
       ${kv([["Caminho", esc(key)], ["Tamanho", `<span class="num">${size(o.size)} (${o.size.toLocaleString("pt-BR")} bytes)</span>`], ["Tipo", esc(o.contentType)],
-            ["Modificado em", when(o.lastModified)], ["ETag", `<code>${esc(o.etag)}</code>`], ["Criptografia", o.encrypted ? "AES-256 (SSE-S3)" : "Nenhuma"]])}
+            ["Modificado em", when(o.lastModified)], ["ETag", `<code>${esc(o.etag)}</code>`], ["Partes", o.parts ? String(o.parts) : ""],
+            ["Criptografia", o.encrypted ? "AES-256 (SSE-S3)" : "Nenhuma"], ["No disco", o.diskPath ? `<code>${esc(o.diskPath)}</code>` : ""]])}
       ${meta.length ? `<h3>Metadados</h3>${kv(meta.map(([k, v]) => [k, esc(v)]))}` : ""}
       ${o.tags.length ? `<h3>Tags</h3><p>${o.tags.map(([k, v]) => `<span class="tag">${esc(k)}=${esc(v)}</span>`).join(" ")}</p>` : ""}
       <p style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}">Baixar</a><button class="btn" id="drawer-share">Compartilhar</button></p>
       ${versioned ? `<h3 style="margin-top:22px">Versões</h3><ul class="versions">${o.versions.map(v => `<li>
           <span><span class="num">${when(v.lastModified)}</span> ${v.isLatest ? '<span class="tag">Atual</span>' : ""}${v.deleteMarker ? '<span class="tag warn">Marcador de exclusão</span>' : ` <span class="muted num">${size(v.size)}</span>`}</span>
-          <span class="row-actions">${v.deleteMarker ? "" : `<a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}&versionId=${enc(v.versionId)}">Baixar</a>`}${ro ? "" : `<button class="btn link danger" data-delver="${esc(v.versionId)}">Apagar</button>`}</span></li>`).join("")}</ul>` : ""}
+          <span class="row-actions">${v.deleteMarker ? "" : `<a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}&versionId=${enc(v.versionId)}">Baixar</a>`}${writable ? `<button class="btn link danger" data-delver="${esc(v.versionId)}">Apagar</button>` : ""}</span></li>`).join("")}</ul>` : ""}
     </div>`;
   d.classList.add("open");
   d.setAttribute("aria-hidden", "false");
   $("#close-drawer").focus();
   $("#close-drawer").onclick = closeDrawer;
   $("#drawer-share").onclick = () => shareDialog(bucket, key);
+  const tp = $("#text-preview");
+  if (tp) fetch(`/api/buckets/${enc(bucket)}/download?key=${enc(key)}&inline=1`, { credentials: "same-origin" })
+    .then(r => r.text()).then(t => { tp.textContent = t.length > 20000 ? t.slice(0, 20000) + "\n…" : t; }).catch(() => { tp.textContent = "Não foi possível carregar."; });
   $$("[data-delver]", d).forEach(b => b.onclick = async () => {
     if (!await confirmDlg("Apagar versão", "Esta versão será apagada permanentemente.", "Apagar versão")) return;
     try {
@@ -549,36 +667,58 @@ async function objectDrawer(bucket, key) {
 /* ---------- bucket settings ---------- */
 async function settingsView(bucket) {
   const b = await api("GET", `/api/buckets/${enc(bucket)}`);
-  const ro = state.me.readOnly;
-  const dis = ro ? "disabled" : "";
+  state.bucket = b;
+  const can = b.canAdmin;
+  const dis = can ? "" : "disabled";
   const mode = b.policyMode;
-  const ruleRow = (r = {}) => `<div class="rule">
+  const remove = can ? '<button class="btn link danger" type="button" data-remove>Remover</button>' : "";
+  const ruleRow = (r = {}) => `<div class="row-box rule">
       <div class="field"><label>Prefixo (vazio = todo o bucket)</label><input name="prefix" value="${esc(r.prefix || "")}" placeholder="logs/" ${dis}></div>
       <div class="field"><label>Apagar após (dias)</label><input name="expirationDays" type="number" min="1" value="${r.expirationDays ?? ""}" ${dis}></div>
       <div class="field"><label>Versões antigas (dias)</label><input name="noncurrentDays" type="number" min="1" value="${r.noncurrentDays ?? ""}" ${dis}></div>
       <div class="field"><label>Envios incompletos (dias)</label><input name="abortDays" type="number" min="1" value="${r.abortDays ?? ""}" ${dis}></div>
       <label class="switch" title="Regra ativa"><input type="checkbox" name="enabled" ${r.enabled !== false ? "checked" : ""} ${dis}><span class="small">Ativa</span></label>
-      ${ro ? "" : '<button class="btn link danger" type="button" data-remove>Remover</button>'}</div>`;
+      ${remove}</div>`;
   const evOpts = [["s3:ObjectCreated:*", "Criação"], ["s3:ObjectRemoved:*", "Exclusão"], ["*", "Todos"]];
   const hookRow = (h = {}) => {
-    const ev = h.events?.length === 1 ? h.events[0] : (h.events?.length ? "*" : "*");
-    return `<div class="hook">
+    const ev = h.events?.length === 1 ? h.events[0] : "*";
+    return `<div class="row-box hook">
       <div class="field"><label>URL</label><input name="url" type="url" value="${esc(h.url || "")}" placeholder="https://exemplo.com/webhook" required ${dis}></div>
       <div class="field"><label>Eventos</label><select name="events" ${dis}>${evOpts.map(([v, l]) => `<option value="${v}" ${v === ev ? "selected" : ""}>${l}</option>`).join("")}</select></div>
       <div class="field"><label>Prefixo</label><input name="prefix" value="${esc(h.prefix || "")}" ${dis}></div>
       <div class="field"><label>Token</label><input name="token" value="${esc(h.token || "")}" placeholder="opcional" ${dis}></div>
-      ${ro ? "" : '<button class="btn link danger" type="button" data-remove>Remover</button>'}</div>`;
+      ${remove}</div>`;
   };
+  const targetRow = (t = {}) => `<div class="row-box target" data-id="${esc(t.id || "")}">
+      <div class="field"><label>Endereço do servidor S3</label><input name="endpoint" value="${esc(t.endpoint || "")}" placeholder="https://s3.us-east-1.amazonaws.com" ${dis}></div>
+      <div class="field"><label>Bucket de destino</label><input name="bucket" value="${esc(t.bucket || "")}" ${dis}></div>
+      <div class="field"><label>Região</label><input name="region" value="${esc(t.region || "us-east-1")}" ${dis}></div>
+      <div class="field"><label>Access key</label><input name="accessKey" value="${esc(t.accessKey || "")}" autocomplete="off" ${dis}></div>
+      <div class="field"><label>Secret key</label><input name="secretKey" type="password" placeholder="${t.id ? "mantida" : ""}" autocomplete="new-password" ${dis}></div>
+      <div class="opts">
+        <div class="field" style="flex:1;min-width:160px"><label>Somente o prefixo</label><input name="prefix" value="${esc(t.prefix || "")}" placeholder="todo o bucket" ${dis}></div>
+        <label class="switch"><input type="checkbox" name="replicateDeletes" ${t.replicateDeletes ? "checked" : ""} ${dis}><span class="small">Replicar exclusões</span></label>
+        <label class="switch"><input type="checkbox" name="enabled" ${t.enabled !== false ? "checked" : ""} ${dis}><span class="small">Ativo</span></label>
+        ${can ? `<button class="btn small" type="button" data-test>Testar conexão</button>${t.id ? `<button class="btn small" type="button" data-resync="${esc(t.id)}">Reenviar tudo</button>` : ""}${remove}` : ""}
+        <span class="small" data-result></span>
+      </div></div>`;
+  const rs = b.replicationStats;
 
   $("#app").innerHTML = shell("buckets", `
     <div class="head">${pathHtml(bucket, "")}</div>
     ${bucketTabs(bucket, "settings")}
+    ${can ? "" : '<p class="note">Sua chave pode ver estas configurações, mas não alterá-las.</p>'}
     <section class="section"><h2>Versionamento</h2>
       <p>Guarda as versões anteriores de cada arquivo quando ele é substituído ou excluído, para que você possa recuperá-las.</p>
       <label class="switch"><input type="checkbox" id="versioning" ${b.versioning === "Enabled" ? "checked" : ""} ${dis}><span>${b.versioning === "Enabled" ? "Ativado" : b.versioning === "Suspended" ? "Suspenso (as versões existentes continuam guardadas)" : "Desativado"}</span></label>
     </section>
+    <section class="section"><h2>Arquivos legíveis no disco</h2>
+      <p>Cada arquivo também aparece com o nome real em <code>${esc(b.readablePath)}</code>, para você abrir, copiar ou fazer backup sem o BoxSpace. Esses arquivos são só para leitura: alterações feitas direto no disco não voltam para o bucket.</p>
+      <label class="switch"><input type="checkbox" id="readable" ${b.readable ? "checked" : ""} ${dis}><span>${b.readable ? "Ativado" : "Desativado"}</span></label>
+      ${b.mode === "erasure" ? '<p class="note">No modo erasure coding, os arquivos legíveis são cópias completas e ocupam espaço extra no primeiro disco.</p>' : ""}
+    </section>
     <section class="section"><h2>Criptografia</h2>
-      <p>Novos arquivos são cifrados no disco com AES-256. Os arquivos já existentes não mudam.</p>
+      <p>Novos arquivos são cifrados no disco com AES-256. Os arquivos já existentes não mudam.${b.readable ? " Para ativar, desligue antes os arquivos legíveis no disco." : ""}</p>
       <label class="switch"><input type="checkbox" id="encryption" ${b.encryption ? "checked" : ""} ${dis}><span>${b.encryption ? "Ativada para novos arquivos" : "Desativada"}</span></label>
     </section>
     <section class="section"><h2>Acesso público</h2>
@@ -589,22 +729,38 @@ async function settingsView(bucket) {
         <label><input type="radio" name="mode" value="custom" ${mode === "custom" ? "checked" : ""} ${dis}><span><b>Política personalizada</b><br><span class="muted small">Uma política no formato JSON da AWS.</span></span></label>
       </div>
       <div class="field" id="policy-box" ${mode === "custom" ? "" : "hidden"}><label for="policy">Política</label><textarea id="policy" spellcheck="false" ${dis}>${esc(b.policy ? JSON.stringify(JSON.parse(b.policy), null, 2) : "")}</textarea></div>
-      ${ro ? "" : '<button class="btn primary" id="save-policy">Salvar acesso</button>'}
+      ${can ? '<button class="btn primary" id="save-policy">Salvar acesso</button>' : ""}
+    </section>
+    <section class="section"><h2>Replicação</h2>
+      <p>Copia automaticamente os arquivos novos para outro servidor compatível com S3, como outro BoxSpace, AWS S3 ou Backblaze B2. Ao adicionar um destino, os arquivos que já existem também são enviados.</p>
+      ${b.replication.length ? `<p class="small">${rs.pending ? `<span class="tag">${rs.pending} pendente(s)</span>` : '<span class="tag good">Em dia</span>'}${rs.failed ? ` <span class="tag bad">${rs.failed} com falha</span> ${can ? '<button class="btn link small" id="repl-retry">Tentar de novo</button>' : ""}` : ""}${rs.lastError ? ` <span class="muted">Último erro: ${esc(rs.lastError)}</span>` : ""}</p>` : ""}
+      <div class="grid-rows" id="targets">${b.replication.map(targetRow).join("")}</div>
+      ${can ? '<button class="btn" id="add-target">Adicionar destino</button> <button class="btn primary" id="save-targets">Salvar replicação</button>' : ""}
     </section>
     <section class="section"><h2>Limpeza automática</h2>
       <p>Apaga arquivos depois de um número de dias. A verificação roda a cada hora.</p>
       <div class="grid-rows" id="rules">${b.lifecycle.map(ruleRow).join("")}</div>
-      ${ro ? "" : '<button class="btn" id="add-rule">Adicionar regra</button> <button class="btn primary" id="save-rules">Salvar regras</button>'}
+      ${can ? '<button class="btn" id="add-rule">Adicionar regra</button> <button class="btn primary" id="save-rules">Salvar regras</button>' : ""}
     </section>
     <section class="section"><h2>Notificações</h2>
       <p>Envia um POST em JSON para uma URL sempre que arquivos são criados ou excluídos.</p>
       <div class="grid-rows" id="hooks">${b.webhooks.map(hookRow).join("")}</div>
-      ${ro ? "" : '<button class="btn" id="add-hook">Adicionar destino</button> <button class="btn primary" id="save-hooks">Salvar notificações</button>'}
+      ${can ? '<button class="btn" id="add-hook">Adicionar destino</button> <button class="btn primary" id="save-hooks">Salvar notificações</button>' : ""}
     </section>`);
-  if (ro) return;
+  if (!can) return;
   const bp = `/api/buckets/${enc(bucket)}`;
-  $("#versioning").onchange = async ev => { try { await api("PUT", `${bp}/versioning`, { enabled: ev.target.checked }); toast(ev.target.checked ? "Versionamento ativado." : "Versionamento suspenso."); render(); } catch (e) { fail(e); } };
-  $("#encryption").onchange = async ev => { try { await api("PUT", `${bp}/encryption`, { enabled: ev.target.checked }); toast(ev.target.checked ? "Criptografia ativada." : "Criptografia desativada."); render(); } catch (e) { fail(e); } };
+  const toggle = (id, path, on, off) => $(id).onchange = async ev => {
+    try { await api("PUT", `${bp}/${path}`, { enabled: ev.target.checked }); toast(ev.target.checked ? on : off); render(); }
+    catch (e) { ev.target.checked = !ev.target.checked; fail(e); }
+  };
+  toggle("#versioning", "versioning", "Versionamento ativado.", "Versionamento suspenso.");
+  toggle("#encryption", "encryption", "Criptografia ativada.", "Criptografia desativada.");
+  $("#readable").onchange = async ev => {
+    const on = ev.target.checked;
+    if (!on && !await confirmDlg("Desativar arquivos legíveis", `A pasta <code>${esc(b.readablePath)}</code> será apagada do disco. Os arquivos continuam guardados no bucket.`, "Desativar")) { ev.target.checked = true; return; }
+    try { await api("PUT", `${bp}/readable`, { enabled: on }); toast(on ? "Arquivos legíveis ativados. Os arquivos existentes estão sendo criados." : "Arquivos legíveis desativados."); render(); }
+    catch (e) { ev.target.checked = !on; fail(e); }
+  };
   $$('[name="mode"]').forEach(r => r.onchange = () => {
     $("#policy-box").hidden = r.value !== "custom" || !r.checked;
     if (r.value === "custom" && !$("#policy").value) $("#policy").value = JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: "*", Action: ["s3:GetObject"], Resource: [`arn:aws:s3:::${bucket}/publico/*`] }] }, null, 2);
@@ -614,10 +770,35 @@ async function settingsView(bucket) {
     if (m === "public-read" && !await confirmDlg("Tornar público", `Qualquer pessoa poderá baixar e listar os arquivos de <b>${esc(bucket)}</b>.`, "Tornar público")) return;
     try { await api("PUT", `${bp}/policy`, { mode: m, policy: $("#policy").value }); toast("Acesso salvo."); render(); } catch (e) { fail(e); }
   };
-  const wireRemove = root => $$("[data-remove]", root).forEach(b => b.onclick = () => b.parentElement.remove());
-  wireRemove(document);
-  $("#add-rule").onclick = () => { $("#rules").insertAdjacentHTML("beforeend", ruleRow()); wireRemove($("#rules")); };
-  $("#add-hook").onclick = () => { $("#hooks").insertAdjacentHTML("beforeend", hookRow()); wireRemove($("#hooks")); };
+  const wire = root => {
+    $$("[data-remove]", root).forEach(x => x.onclick = () => x.closest(".row-box").remove());
+    $$("[data-test]", root).forEach(x => x.onclick = async () => {
+      const row = x.closest(".row-box"), out = $("[data-result]", row);
+      out.textContent = "Testando…";
+      try {
+        const r = await api("POST", `${bp}/replication/test`, targetData(row));
+        out.innerHTML = r.ok ? '<span class="tag good">Conexão OK</span>' : `<span class="tag bad">${esc(r.error)}</span>`;
+      } catch (e) { out.innerHTML = `<span class="tag bad">${esc(e.message)}</span>`; }
+    });
+    $$("[data-resync]", root).forEach(x => x.onclick = async () => {
+      try { const r = await api("POST", `${bp}/replication/${enc(x.dataset.resync)}/resync`); toast(`${r.queued} arquivo(s) na fila de envio.`); } catch (e) { fail(e); }
+    });
+  };
+  wire(document);
+  const targetData = row => {
+    const v = n => $(`[name="${n}"]`, row);
+    return { id: row.dataset.id, endpoint: v("endpoint").value.trim(), bucket: v("bucket").value.trim(), region: v("region").value.trim(),
+      accessKey: v("accessKey").value.trim(), secretKey: v("secretKey").value, prefix: v("prefix").value,
+      replicateDeletes: v("replicateDeletes").checked, enabled: v("enabled").checked };
+  };
+  const add = (sel, html) => { $(sel).insertAdjacentHTML("beforeend", html); wire($(sel).lastElementChild); };
+  $("#add-rule").onclick = () => add("#rules", ruleRow());
+  $("#add-hook").onclick = () => add("#hooks", hookRow());
+  $("#add-target").onclick = () => add("#targets", targetRow());
+  $("#repl-retry")?.addEventListener("click", async () => { try { const r = await api("POST", `${bp}/replication/retry`); toast(`${r.retried} envio(s) recolocados na fila.`); render(); } catch (e) { fail(e); } });
+  $("#save-targets").onclick = async () => {
+    try { const r = await api("PUT", `${bp}/replication`, { targets: $$("#targets .target").map(targetData) }); toast(r.queued ? `Replicação salva. ${r.queued} arquivo(s) existente(s) na fila.` : "Replicação salva."); render(); } catch (e) { fail(e); }
+  };
   const num = el => el.value ? +el.value : null;
   $("#save-rules").onclick = async () => {
     const rules = $$("#rules .rule").map(r => ({ prefix: $('[name="prefix"]', r).value, enabled: $('[name="enabled"]', r).checked,
@@ -634,20 +815,54 @@ async function settingsView(bucket) {
 }
 
 /* ---------- keys ---------- */
+function grantSummary(k) {
+  if (!k.grants?.length) return k.readOnly ? '<span class="tag warn">Todos os buckets, só leitura</span>' : '<span class="tag">Todos os buckets</span>';
+  return k.grants.map(g => `<span class="tag ${g.write && !k.readOnly ? "" : "warn"}">${esc(g.bucket)} ${g.write && !k.readOnly ? "(leitura e escrita)" : "(leitura)"}</span>`).join(" ");
+}
+
+function keyForm(k = {}) {
+  const specific = (k.grants || []).length > 0;
+  const grantRow = (g = {}) => `<div class="row-box grant">
+      <div class="field"><label>Bucket (aceita *)</label><input name="gbucket" value="${esc(g.bucket || "")}" placeholder="fotos-*"></div>
+      <div class="field"><label>Acesso</label><select name="gwrite"><option value="0">Leitura</option><option value="1" ${g.write ? "selected" : ""}>Leitura e escrita</option></select></div>
+      <button class="btn link danger" type="button" data-remove>Remover</button></div>`;
+  return {
+    html: `<div class="field"><label for="desc">Descrição</label><input id="desc" name="description" value="${esc(k.description || "")}" placeholder="backup do servidor web"></div>
+      <div class="radios" role="radiogroup" style="margin-top:4px">
+        <label><input type="radio" name="scope" value="all" ${specific ? "" : "checked"}><span><b>Todos os buckets</b><br><span class="muted small">Pode criar buckets e mudar configurações, se não for somente leitura.</span></span></label>
+        <label><input type="radio" name="scope" value="some" ${specific ? "checked" : ""}><span><b>Buckets específicos</b><br><span class="muted small">Acesso só aos buckets listados. Não cria buckets nem muda configurações.</span></span></label>
+      </div>
+      <label class="check" id="ro-box" ${specific ? "hidden" : ""}><input type="checkbox" name="readOnly" ${k.readOnly ? "checked" : ""}><span>Somente leitura</span></label>
+      <div id="grants-box" ${specific ? "" : "hidden"}><div class="grid-rows" id="grants">${(k.grants?.length ? k.grants : [{}]).map(grantRow).join("")}</div>
+      <button class="btn small" type="button" id="add-grant">Adicionar bucket</button></div>`,
+    wire: f => {
+      const sync = () => { const some = $('[name="scope"]:checked', f).value === "some"; $("#grants-box", f).hidden = !some; $("#ro-box", f).hidden = some; };
+      $$('[name="scope"]', f).forEach(r => r.onchange = sync);
+      const wireRm = root => $$("[data-remove]", root).forEach(x => x.onclick = () => x.closest(".row-box").remove());
+      wireRm(f);
+      $("#add-grant", f).onclick = () => { $("#grants", f).insertAdjacentHTML("beforeend", grantRow()); wireRm($("#grants", f).lastElementChild); };
+    },
+    read: (fd, f) => {
+      const some = fd.get("scope") === "some";
+      const grants = some ? $$("#grants .grant", f).map(r => ({ bucket: $('[name="gbucket"]', r).value.trim(), write: $('[name="gwrite"]', r).value === "1" })).filter(g => g.bucket) : [];
+      if (some && !grants.length) throw new Error("Adicione pelo menos um bucket.");
+      return { description: fd.get("description"), readOnly: !some && fd.get("readOnly") === "on", grants };
+    },
+  };
+}
+
 async function keysView() {
   const keys = await api("GET", "/api/keys");
   $("#app").innerHTML = shell("keys", `
     <div class="head"><h1>Chaves de acesso</h1><div class="actions"><button class="btn primary" id="new-key">Criar chave</button></div></div>
-    <p class="muted" style="max-width:70ch">Use uma chave por aplicação, em vez das credenciais root. Uma chave somente leitura pode baixar e listar, mas não pode alterar nada.</p>
-    <div class="panel">${keys.length ? `<table><thead><tr><th>Access key</th><th>Descrição</th><th>Permissão</th><th class="hide-sm">Criada em</th><th></th></tr></thead><tbody>
-      ${keys.map(k => `<tr><td><code>${esc(k.accessKey)}</code></td><td>${esc(k.description)}</td><td>${k.readOnly ? '<span class="tag warn">Somente leitura</span>' : '<span class="tag">Leitura e escrita</span>'}</td><td class="hide-sm muted num">${when(k.created)}</td>
-        <td><div class="row-actions"><button class="btn link danger" data-revoke="${esc(k.accessKey)}">Revogar</button></div></td></tr>`).join("")}</tbody></table>`
+    <p class="muted" style="max-width:72ch">Use uma chave por aplicação, em vez das credenciais root, e dê a cada uma só os buckets de que ela precisa.</p>
+    <div class="panel">${keys.length ? `<table><thead><tr><th>Access key</th><th>Descrição</th><th>Permissões</th><th class="hide-sm">Criada em</th><th></th></tr></thead><tbody>
+      ${keys.map(k => `<tr><td><code>${esc(k.accessKey)}</code></td><td>${esc(k.description)}</td><td>${grantSummary(k)}</td><td class="hide-sm muted num">${when(k.created)}</td>
+        <td><div class="row-actions"><button class="btn link" data-edit="${esc(k.accessKey)}">Editar</button><button class="btn link danger" data-revoke="${esc(k.accessKey)}">Revogar</button></div></td></tr>`).join("")}</tbody></table>`
       : `<div class="empty"><h3>Nenhuma chave criada</h3><p>As aplicações estão usando as credenciais root. Crie uma chave para cada uma.</p></div>`}</div>`);
   $("#new-key").onclick = async () => {
-    const r = await dialog(`<h2>Criar chave de acesso</h2>
-      <div class="field"><label for="desc">Descrição</label><input id="desc" name="description" placeholder="backup do servidor web"></div>
-      <div class="field"><label for="perm">Permissão</label><select id="perm" name="perm"><option value="rw">Leitura e escrita</option><option value="ro">Somente leitura</option></select></div>${foot("Criar chave", false)}`,
-      f => api("POST", "/api/keys", { description: f.get("description"), readOnly: f.get("perm") === "ro" }));
+    const form = keyForm();
+    const r = await dialog(`<h2>Criar chave de acesso</h2>${form.html}${foot("Criar chave", false)}`, (fd, f) => api("POST", "/api/keys", form.read(fd, f)), form.wire);
     if (!r) return;
     const shown = dialog(`<h2>Chave criada</h2><p class="muted">Copie a secret key agora. Ela não será mostrada de novo.</p>
       <div class="field"><label>Access key</label><div class="secret"><span>${esc(r.accessKey)}</span></div></div>
@@ -657,20 +872,110 @@ async function keysView() {
     await shown;
     render();
   };
+  $$("[data-edit]").forEach(b => b.onclick = async () => {
+    const k = keys.find(x => x.accessKey === b.dataset.edit);
+    const form = keyForm(k);
+    const r = await dialog(`<h2>Editar <code>${esc(k.accessKey)}</code></h2>${form.html}${foot("Salvar", false)}`, (fd, f) => api("PUT", `/api/keys/${enc(k.accessKey)}`, form.read(fd, f)), form.wire);
+    if (r) { toast("Permissões salvas."); render(); }
+  });
   $$("[data-revoke]").forEach(b => b.onclick = async () => {
     if (!await confirmDlg("Revogar chave", `As aplicações que usam <code>${esc(b.dataset.revoke)}</code> perderão o acesso imediatamente.`, "Revogar chave")) return;
     try { await api("DELETE", `/api/keys/${enc(b.dataset.revoke)}`); toast("Chave revogada."); render(); } catch (e) { fail(e); }
   });
 }
 
+/* ---------- audit ---------- */
+async function auditView(q) {
+  const params = new URLSearchParams();
+  for (const k of ["key", "bucket", "op"]) if (q.get(k)) params.set(k, q.get(k));
+  if (q.get("errors")) params.set("errors", "1");
+  const r = await api("GET", `/api/audit?${params}`);
+  const rows = r.entries.map(e => `<tr>
+      <td class="num muted">${whenFull(e.time)}</td>
+      <td>${e.accessKey ? `<code>${esc(e.accessKey)}</code>` : '<span class="muted">anônimo</span>'}</td>
+      <td>${esc(e.op)}${e.source === "console" ? ' <span class="tag">console</span>' : ""}</td>
+      <td class="name">${esc(e.bucket || "")}${e.key ? `<span class="muted">/${esc(e.key)}</span>` : ""}</td>
+      <td><span class="tag ${e.status >= 400 ? "bad" : "good"}">${e.status}</span>${e.error ? ` <span class="small muted">${esc(e.error)}</span>` : ""}</td>
+      <td class="hide-sm muted">${esc(e.remote)}</td>
+      <td class="hide-sm r num muted">${e.durationMs} ms</td></tr>`).join("");
+  $("#app").innerHTML = shell("audit", `
+    <div class="head"><h1>Auditoria</h1></div>
+    ${r.enabled ? "" : '<div class="banner">O log de auditoria está desligado (BOXSPACE_AUDIT=0).</div>'}
+    <form class="toolbar" id="afilter">
+      <input class="text" name="key" placeholder="Access key" value="${esc(q.get("key") || "")}" style="max-width:200px">
+      <input class="text" name="bucket" placeholder="Bucket" value="${esc(q.get("bucket") || "")}" style="max-width:180px">
+      <input class="text" name="op" placeholder="Operação (ex.: DeleteObject)" value="${esc(q.get("op") || "")}" style="max-width:240px">
+      <label class="check" style="margin:0"><input type="checkbox" name="errors" ${q.get("errors") ? "checked" : ""}><span>Só erros</span></label>
+      <button class="btn">Filtrar</button>
+    </form>
+    <div class="panel">${r.entries.length ? `<table><thead><tr><th>Quando</th><th>Chave</th><th>Operação</th><th>Alvo</th><th>Resultado</th><th class="hide-sm">IP</th><th class="hide-sm r">Duração</th></tr></thead><tbody>${rows}</tbody></table>`
+      : '<div class="empty"><h3>Nenhum registro</h3><p>Nada corresponde a estes filtros nos últimos 7 dias.</p></div>'}</div>
+    <p class="note">Mostrando até 200 registros mais recentes dos últimos 7 dias. Os arquivos completos ficam em <code>.boxspace/audit/</code> no primeiro disco.</p>`);
+  $("#afilter").onsubmit = ev => {
+    ev.preventDefault();
+    const f = new FormData(ev.target), p = new URLSearchParams();
+    for (const k of ["key", "bucket", "op"]) if (f.get(k)) p.set(k, f.get(k).trim());
+    if (f.get("errors")) p.set("errors", "1");
+    location.hash = `#/audit${p.toString() ? "?" + p : ""}`;
+  };
+}
+
 /* ---------- server ---------- */
-async function aboutView() {
-  const i = await api("GET", "/api/info");
-  const ak = state.me.accessKey;
-  $("#app").innerHTML = shell("about", `
+function modeText(s) {
+  const n = s.disks.length;
+  if (s.mode === "single") return "Um disco, sem redundância. Se o disco falhar, os dados se perdem; use replicação ou backups.";
+  if (s.mode === "mirror") return `Espelhamento: cada arquivo é gravado em todos os ${n} discos. Os dados continuam disponíveis com até ${n - 1} disco(s) perdido(s).`;
+  const pct = Math.round(s.parity / n * 100);
+  return `Erasure coding: cada arquivo é dividido em ${s.dataShards} fragmentos de dados e ${s.parity} de paridade. Os dados continuam disponíveis com até ${s.parity} disco(s) perdido(s); ${pct}% do espaço é usado para proteção.`;
+}
+
+async function serverView() {
+  const [i, s] = await Promise.all([api("GET", "/api/info"), api("GET", "/api/system")]);
+  const h = s.heal;
+  const disks = s.disks.map(d => {
+    const used = d.total ? (d.total - d.free) / d.total * 100 : 0;
+    return `<tr><td class="num">${d.index + 1}</td><td><code>${esc(d.path)}</code></td>
+      <td>${d.online ? '<span class="tag good">Online</span>' : '<span class="tag bad">Offline</span>'}</td>
+      <td class="hide-sm"><div class="meter" title="${used.toFixed(0)}% usado"><i style="width:${used}%"></i></div></td>
+      <td class="r num">${d.total ? `${size(d.free)} livres de ${size(d.total)}` : ""}</td></tr>`;
+  }).join("");
+  $("#app").innerHTML = shell("server", `
     <div class="head"><h1>Servidor</h1></div>
-    <div class="stats"><div><b class="num">${i.buckets}</b><span class="muted">buckets</span></div><div><b class="num">${i.objects.toLocaleString("pt-BR")}</b><span class="muted">objetos</span></div><div><b class="num">${size(i.bytes)}</b><span class="muted">armazenados (todas as versões)</span></div>${state.me.root ? `<div><b class="num">${i.keys}</b><span class="muted">chaves de acesso</span></div>` : ""}</div>
-    <section class="section"><h2>Conectar uma aplicação</h2>
+    ${s.writable ? "" : '<div class="banner bad">Não há discos online suficientes para gravar. Leituras podem continuar funcionando.</div>'}
+    <div class="stats"><div><b class="num">${i.buckets}</b><span class="muted">buckets</span></div><div><b class="num">${i.objects.toLocaleString("pt-BR")}</b><span class="muted">objetos</span></div><div><b class="num">${size(i.bytes)}</b><span class="muted">armazenados (todas as versões)</span></div><div><b class="num">${i.disksOnline}/${i.disks}</b><span class="muted">discos online</span></div></div>
+    <section class="section"><h2>Discos</h2>
+      <p>${esc(modeText(s))}</p>
+      <div class="panel"><table><thead><tr><th>Disco</th><th>Diretório</th><th>Situação</th><th class="hide-sm">Uso</th><th class="r">Espaço</th></tr></thead><tbody>${disks}</tbody></table></div>
+      <p class="note">Para trocar um disco, pare o servidor, monte o disco novo no mesmo diretório e inicie de novo: os dados são reconstruídos automaticamente.</p>
+    </section>
+    <section class="section"><h2>Verificação de integridade</h2>
+      <p>Confere se todas as cópias e fragmentos estão no lugar, reconstrói o que faltar e remove sobras de envios interrompidos. Roda sozinha a cada ${Math.round(s.healIntervalSecs / 3600)} hora(s) e sempre que um disco volta.</p>
+      ${h.running ? `<p><span class="tag">Em andamento</span> ${h.checked.toLocaleString("pt-BR")} versão(ões) verificada(s)…</p>`
+        : h.finished ? `<dl class="kv"><dt>Última verificação</dt><dd>${whenFull(h.finished)}${h.deep ? " (completa)" : ""}</dd><dt>Verificadas</dt><dd class="num">${h.checked.toLocaleString("pt-BR")}</dd><dt>Reparadas</dt><dd class="num">${h.healed}</dd><dt>Sobras removidas</dt><dd class="num">${h.orphans}</dd><dt>Irrecuperáveis</dt><dd class="num">${h.lostCount ? `<span class="tag bad">${h.lostCount}</span>` : "0"}</dd></dl>` : '<p class="muted">Ainda não houve verificação desde que o servidor iniciou.</p>'}
+      ${h.lost?.length ? `<p class="small">Objetos que não podem ser reconstruídos:</p><pre>${h.lost.map(esc).join("\n")}</pre>` : ""}
+      ${h.errors?.length ? `<p class="small">Erros:</p><pre>${h.errors.slice(0, 20).map(esc).join("\n")}</pre>` : ""}
+      <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="heal" ${h.running ? "disabled" : ""}>Verificar agora</button><button class="btn" id="heal-deep" ${h.running ? "disabled" : ""}>Verificação completa</button></p>
+      <p class="note">A verificação completa lê todos os dados para detectar corrupção silenciosa (bitrot). Pode levar muito tempo em servidores grandes.</p>
+    </section>
+    <section class="section"><h2>Monitoramento</h2>
+      <dl class="kv">
+        <dt>Saúde</dt><dd><code>${esc(i.serverUrl)}/_boxspace/health</code></dd>
+        <dt>Métricas</dt><dd><code>${esc(i.serverUrl)}/_boxspace/metrics</code> ${s.metricsEnabled ? (s.metricsProtected ? '<span class="tag">com token</span>' : '<span class="tag warn">públicas</span>') : '<span class="tag warn">desligadas</span>'}</dd>
+        <dt>Auditoria</dt><dd>${s.audit ? '<span class="tag good">Ligada</span>' : '<span class="tag warn">Desligada</span>'}</dd>
+        <dt>Replicação</dt><dd>${s.replication.pending} pendente(s), ${s.replication.failed} com falha</dd>
+      </dl>
+      ${s.metricsEnabled ? "" : '<p class="note">Para coletar métricas com Prometheus, defina <code>BOXSPACE_METRICS_TOKEN</code>.</p>'}
+    </section>
+    ${connectHtml(i)}`);
+  const go = deep => async () => { try { await api("POST", "/api/system/heal", { deep }); toast("Verificação iniciada."); setTimeout(render, 600); } catch (e) { fail(e); } };
+  $("#heal").onclick = go(false);
+  $("#heal-deep").onclick = go(true);
+  if (h.running) pollTimer = setTimeout(() => { if (parseHash().parts[0] === "server") render(); }, 3000);
+}
+
+function connectHtml(i) {
+  const ak = state.me.accessKey;
+  return `<section class="section"><h2>Conectar uma aplicação</h2>
       <p>O BoxSpace fala a API do S3. Use o endereço abaixo como endpoint em qualquer cliente S3.</p>
       <dl class="kv"><dt>Endpoint</dt><dd><code>${esc(i.serverUrl)}</code></dd><dt>Região</dt><dd><code>${esc(i.region)}</code></dd><dt>Versão</dt><dd>BoxSpace ${esc(i.version)}</dd></dl>
       <h3>Python (boto3)</h3>
@@ -691,7 +996,14 @@ const s3 = new S3Client({
   endpoint: "${esc(i.serverUrl)}", region: "${esc(i.region)}", forcePathStyle: true,
   credentials: { accessKeyId: "${esc(ak)}", secretAccessKey: "SUA_SECRET_KEY" },
 });</pre>
-    </section>`);
+    </section>`;
+}
+
+async function aboutView() {
+  const i = await api("GET", "/api/info");
+  $("#app").innerHTML = shell("about", `<div class="head"><h1>Conectar</h1></div>
+    <div class="stats"><div><b class="num">${i.buckets}</b><span class="muted">buckets</span></div><div><b class="num">${i.objects.toLocaleString("pt-BR")}</b><span class="muted">objetos</span></div><div><b class="num">${size(i.bytes)}</b><span class="muted">armazenados</span></div></div>
+    ${connectHtml(i)}`);
 }
 
 render();

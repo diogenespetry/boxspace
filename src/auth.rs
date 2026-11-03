@@ -5,6 +5,7 @@ use chrono::{DateTime, Duration, NaiveDateTime, Utc};
 
 use crate::{
     error::{Result, S3Error},
+    storage::Grant,
     util::{ct_eq, header, hmac, sha256_hex, uri_encode, Query},
     App,
 };
@@ -18,6 +19,22 @@ pub struct Identity {
     pub access_key: String,
     pub root: bool,
     pub read_only: bool,
+    /// Empty = every bucket.
+    pub grants: Vec<Grant>,
+}
+
+impl Identity {
+    /// Unrestricted read-write key: may create buckets and change bucket settings.
+    pub fn admin(&self) -> bool {
+        !self.read_only && self.grants.is_empty()
+    }
+
+    pub fn can(&self, bucket: &str, write: bool) -> bool {
+        if write && self.read_only {
+            return false;
+        }
+        self.grants.is_empty() || self.grants.iter().any(|g| crate::util::wildcard(&g.bucket, bucket) && (!write || g.write))
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -46,11 +63,11 @@ pub fn lookup(app: &App, ak: &str) -> Result<Option<(String, Identity)>> {
     if ak == app.cfg.root_user {
         return Ok(Some((
             app.cfg.root_password.clone(),
-            Identity { access_key: ak.to_string(), root: true, read_only: false },
+            Identity { access_key: ak.to_string(), root: true, read_only: false, grants: Vec::new() },
         )));
     }
     Ok(app.store.get_key(ak)?.map(|k| {
-        (k.secret_key, Identity { access_key: k.access_key, root: false, read_only: k.read_only })
+        (k.secret_key, Identity { access_key: k.access_key, root: false, read_only: k.read_only, grants: k.grants })
     }))
 }
 
@@ -61,7 +78,7 @@ pub fn signing_key(secret: &str, date: &str, region: &str, service: &str) -> Vec
     hmac(&k, b"aws4_request")
 }
 
-fn canonical_query(q: &Query, exclude_signature: bool) -> String {
+pub fn canonical_query(q: &Query, exclude_signature: bool) -> String {
     let mut pairs: Vec<(String, String)> = q
         .pairs
         .iter()

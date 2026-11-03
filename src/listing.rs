@@ -2,8 +2,18 @@
 
 use crate::{
     error::Result,
-    storage::{ObjectVersion, Store},
+    storage::{ObjectVersion, Scan, Store},
 };
+
+/// Smallest key greater than every key starting with `prefix`
+/// (UTF-8 never contains 0xFF, so the increment cannot overflow).
+fn after_prefix(prefix: &str) -> Vec<u8> {
+    let mut b = prefix.as_bytes().to_vec();
+    if let Some(last) = b.last_mut() {
+        *last += 1;
+    }
+    b
+}
 
 #[derive(Default, Debug)]
 pub struct ListOut {
@@ -47,39 +57,40 @@ pub fn list_current(store: &Store, bucket: &str, prefix: &str, delim: Option<&st
     let mut count = 0usize;
     store.scan(bucket, from, |v| {
         if last_key.as_deref() == Some(v.key.as_str()) {
-            return true; // older version of a key already handled
+            return Scan::Next; // older version of a key already handled
         }
         last_key = Some(v.key.clone());
         if !v.key.starts_with(prefix) {
-            return false;
+            return Scan::Stop;
         }
-        if !marker.is_empty() && (v.key.as_str() <= marker || (skip_under_marker && v.key.starts_with(marker))) {
-            return true;
+        if skip_under_marker && v.key.starts_with(marker) {
+            return Scan::Seek(after_prefix(marker));
+        }
+        if !marker.is_empty() && v.key.as_str() <= marker {
+            return Scan::Next;
         }
         if v.delete_marker {
-            return true;
+            return Scan::Next;
         }
         if let Some(cp) = common_prefix(&v.key, prefix, delim) {
-            if out.prefixes.last().map(String::as_str) == Some(cp) {
-                return true;
-            }
             if count >= max {
                 out.truncated = true;
-                return false;
+                return Scan::Stop;
             }
             out.prefixes.push(cp.to_string());
             out.next = Some(cp.to_string());
             count += 1;
-            return true;
+            // Nothing else under this prefix needs to be visited.
+            return Scan::Seek(after_prefix(cp));
         }
         if count >= max {
             out.truncated = true;
-            return false;
+            return Scan::Stop;
         }
         out.next = Some(v.key.clone());
         out.contents.push(v);
         count += 1;
-        true
+        Scan::Next
     })?;
     if !out.truncated {
         out.next = None;
@@ -111,47 +122,44 @@ pub fn list_versions(
             last_key = Some(v.key.clone());
         }
         if !v.key.starts_with(prefix) {
-            return false;
+            return Scan::Stop;
         }
         if !key_marker.is_empty() {
             if v.key.as_str() < key_marker {
-                return true;
+                return Scan::Next;
             }
             if v.key == key_marker {
                 if version_marker.is_empty() {
-                    return true;
+                    return Scan::Next;
                 }
                 if !passed {
                     passed = v.version_id == version_marker;
-                    return true;
+                    return Scan::Next;
                 }
             } else if skip_under_marker && v.key.starts_with(key_marker) {
-                return true;
+                return Scan::Seek(after_prefix(key_marker));
             }
         }
         if let Some(cp) = common_prefix(&v.key, prefix, delim) {
-            if out.prefixes.last().map(String::as_str) == Some(cp) {
-                return true;
-            }
             if count >= max {
                 out.truncated = true;
-                return false;
+                return Scan::Stop;
             }
             out.prefixes.push(cp.to_string());
             out.next_key = Some(cp.to_string());
             out.next_version = None;
             count += 1;
-            return true;
+            return Scan::Seek(after_prefix(cp));
         }
         if count >= max {
             out.truncated = true;
-            return false;
+            return Scan::Stop;
         }
         out.next_key = Some(v.key.clone());
         out.next_version = Some(v.version_id.clone());
         out.entries.push((v, latest));
         count += 1;
-        true
+        Scan::Next
     })?;
     if !out.truncated {
         out.next_key = None;

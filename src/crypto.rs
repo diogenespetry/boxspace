@@ -24,25 +24,28 @@ pub struct Kms {
 }
 
 impl Kms {
-    /// Load the master key from BOXSPACE_KMS_SECRET_KEY, or from (creating if
-    /// needed) `<meta_dir>/master.key`.
-    pub fn load(meta_dir: &Path) -> Result<Kms, String> {
+    /// Load the master key from BOXSPACE_KMS_SECRET_KEY, or from
+    /// `master.key` on any disk (generated on first start). The generated key
+    /// is copied to every disk so losing one disk does not lose the key.
+    pub fn load(sys_dirs: &[&Path]) -> Result<Kms, String> {
         let key = if let Ok(v) = std::env::var("BOXSPACE_KMS_SECRET_KEY") {
             B64.decode(v.trim()).map_err(|e| format!("BOXSPACE_KMS_SECRET_KEY inválida: {e}"))?
         } else {
-            let path = meta_dir.join("master.key");
-            if path.exists() {
-                let s = std::fs::read_to_string(&path).map_err(|e| e.to_string())?;
-                B64.decode(s.trim()).map_err(|e| format!("master.key inválida: {e}"))?
-            } else {
-                let k = random_bytes::<32>();
-                write_private(&path, B64.encode(k).as_bytes()).map_err(|e| e.to_string())?;
-                tracing::warn!(
-                    "chave mestra gerada em {}; para produção defina BOXSPACE_KMS_SECRET_KEY e guarde-a fora do disco de dados",
-                    path.display()
-                );
-                k.to_vec()
+            let existing = sys_dirs.iter().find_map(|d| std::fs::read_to_string(d.join("master.key")).ok());
+            let key = match existing {
+                Some(s) => B64.decode(s.trim()).map_err(|e| format!("master.key inválida: {e}"))?,
+                None => {
+                    tracing::warn!("chave mestra gerada nos discos de dados; para produção defina BOXSPACE_KMS_SECRET_KEY e guarde-a fora deles");
+                    random_bytes::<32>().to_vec()
+                }
+            };
+            for d in sys_dirs {
+                let p = d.join("master.key");
+                if !p.exists() {
+                    write_private(&p, B64.encode(&key).as_bytes()).map_err(|e| format!("{}: {e}", p.display()))?;
+                }
             }
+            key
         };
         if key.len() != 32 {
             return Err("a chave mestra deve ter 32 bytes".into());
@@ -58,6 +61,25 @@ impl Kms {
         let mut out = nonce.to_vec();
         out.extend(ct);
         (key, B64.encode(out))
+    }
+
+    /// Encrypt arbitrary bytes with the master key (base64 output).
+    pub fn seal_bytes(&self, data: &[u8]) -> String {
+        let nonce = random_bytes::<12>();
+        let ct = self.master.encrypt(Nonce::from_slice(&nonce), data).expect("encrypt");
+        let mut out = nonce.to_vec();
+        out.extend(ct);
+        B64.encode(out)
+    }
+
+    pub fn open_bytes(&self, sealed: &str) -> Result<Vec<u8>, String> {
+        let raw = B64.decode(sealed.trim()).map_err(|e| e.to_string())?;
+        if raw.len() < 12 {
+            return Err("dados cifrados curtos demais".into());
+        }
+        self.master
+            .decrypt(Nonce::from_slice(&raw[..12]), &raw[12..])
+            .map_err(|_| "não foi possível decifrar (chave mestra diferente?)".to_string())
     }
 
     pub fn unwrap_key(&self, wrapped: &str) -> Result<[u8; 32], String> {
@@ -118,6 +140,11 @@ pub fn open(c: &Aes256Gcm, prefix: &[u8; 8], idx: u32, last: bool, ct: &[u8]) ->
 /// Number of encrypted chunks for an object of `size` plaintext bytes.
 pub fn chunk_count(size: u64) -> u64 {
     if size == 0 { 1 } else { size.div_ceil(CHUNK as u64) }
+}
+
+/// Ciphertext length for `size` plaintext bytes.
+pub fn cipher_len(size: u64) -> u64 {
+    size + chunk_count(size) * TAG as u64
 }
 
 #[cfg(test)]

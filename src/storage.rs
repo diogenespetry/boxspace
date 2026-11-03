@@ -1,37 +1,41 @@
-//! Metadata store (redb) and on-disk layout.
-//!
-//! Layout under `<data>/.boxspace/`:
-//!   meta.redb            metadata database
-//!   master.key           SSE master key (if not provided via env)
-//!   tmp/                 in-flight uploads
-//!   blobs/<bucket>/..    object data
-//!   uploads/<id>/..      multipart parts
+//! Metadata index (redb).
 //!
 //! Object versions live in one table keyed by
 //! `bucket \0 key \0 (u64::MAX - seq)`, so a range scan yields keys in
 //! lexicographic order and, for each key, versions newest first.
+//!
+//! The index is derived data: every version is also described by a
+//! `meta.json` written to each disk, so the index can be rebuilt (see
+//! `rebuild.rs`) if the database is lost.
 
 use std::{
     collections::BTreeMap,
-    path::{Path, PathBuf},
+    path::Path,
     sync::atomic::{AtomicU64, Ordering},
 };
 
 use chrono::{DateTime, Utc};
-use redb::{Database, ReadableTable, TableDefinition};
+use redb::{Database, ReadableTable, ReadableTableMetadata, TableDefinition};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
+use tokio::sync::Notify;
 
 use crate::{
     cors::CorsRule,
     error::{Result, S3Error},
     events::Webhook,
     lifecycle::LifecycleRule,
+    phys::Layout,
 };
 
 const BUCKETS: TableDefinition<&str, &[u8]> = TableDefinition::new("buckets");
 const OBJECTS: TableDefinition<&[u8], &[u8]> = TableDefinition::new("objects");
 const UPLOADS: TableDefinition<&str, &[u8]> = TableDefinition::new("uploads");
 const KEYS: TableDefinition<&str, &[u8]> = TableDefinition::new("keys");
+const STATS: TableDefinition<&str, &[u8]> = TableDefinition::new("stats");
+const QUEUE: TableDefinition<u64, &[u8]> = TableDefinition::new("replication_queue");
+/// Small counters; "seq" is the highest version sequence ever issued, so a
+/// clock that goes backwards cannot make new versions sort as older.
+const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
 
 pub const NULL_VERSION: &str = "null";
 
@@ -43,14 +47,30 @@ pub struct EncInfo {
     pub nonce: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
 pub struct BlobRef {
-    /// Path relative to the `.boxspace` directory.
-    pub path: String,
+    /// Directory id under `objects/<bucket>/`.
+    #[serde(default)]
+    pub id: String,
+    #[serde(default)]
+    pub layout: Option<Layout>,
+    /// Pre-multi-disk installs: path relative to disk 0's `.boxspace`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub path: Option<String>,
     /// Plaintext size.
     pub size: u64,
     #[serde(default)]
     pub enc: Option<EncInfo>,
+}
+
+impl BlobRef {
+    pub fn layout(&self) -> Layout {
+        self.layout.clone().unwrap_or_else(|| Layout::Legacy { path: self.path.clone().unwrap_or_default() })
+    }
+    /// Bytes physically stored (ciphertext when encrypted).
+    pub fn stored_len(&self) -> u64 {
+        if self.enc.is_some() { crate::crypto::cipher_len(self.size) } else { self.size }
+    }
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -58,6 +78,8 @@ pub struct BlobRef {
 pub struct ObjectVersion {
     pub key: String,
     pub version_id: String,
+    /// Internal id of this version's directory (holds meta.json).
+    pub oid: String,
     pub seq: u64,
     pub delete_marker: bool,
     pub size: u64,
@@ -70,14 +92,35 @@ pub struct ObjectVersion {
     /// Standard headers: cache-control, content-disposition, ...
     pub headers: BTreeMap<String, String>,
     pub tags: Vec<(String, String)>,
+    /// Single-part data.
     pub blob: Option<BlobRef>,
+    /// Multipart data, in order (no copy is made on completion).
+    pub segments: Vec<BlobRef>,
     pub parts: Option<u32>,
 }
 
 impl ObjectVersion {
     pub fn encrypted(&self) -> bool {
-        self.blob.as_ref().is_some_and(|b| b.enc.is_some())
+        self.blob.as_ref().is_some_and(|b| b.enc.is_some()) || self.segments.iter().any(|s| s.enc.is_some())
     }
+    pub fn blobs(&self) -> impl Iterator<Item = &BlobRef> {
+        self.blob.iter().chain(self.segments.iter())
+    }
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug, Default)]
+#[serde(default)]
+pub struct ReplTarget {
+    pub id: String,
+    pub endpoint: String,
+    pub bucket: String,
+    pub region: String,
+    pub access_key: String,
+    /// Secret key wrapped with the master key (base64).
+    pub secret_enc: String,
+    pub prefix: String,
+    pub replicate_deletes: bool,
+    pub enabled: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
@@ -93,7 +136,10 @@ pub struct BucketMeta {
     pub tags: Option<Vec<(String, String)>>,
     /// Default SSE-S3 encryption for new objects.
     pub encryption: bool,
+    /// Mirror current objects as plain files under `<disk0>/<bucket>/`.
+    pub readable: bool,
     pub webhooks: Vec<Webhook>,
+    pub replication: Vec<ReplTarget>,
 }
 
 impl BucketMeta {
@@ -125,6 +171,13 @@ pub struct UploadMeta {
     pub parts: BTreeMap<u32, PartMeta>,
 }
 
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct Grant {
+    /// Bucket name or pattern (`*` wildcard).
+    pub bucket: String,
+    pub write: bool,
+}
+
 #[derive(Serialize, Deserialize, Clone, Debug, Default)]
 #[serde(default)]
 pub struct AccessKey {
@@ -133,6 +186,29 @@ pub struct AccessKey {
     pub read_only: bool,
     pub description: String,
     pub created: DateTime<Utc>,
+    /// Empty = every bucket.
+    pub grants: Vec<Grant>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Copy, Debug, Default)]
+#[serde(default)]
+pub struct Stats {
+    pub objects: i64,
+    pub versions: i64,
+    pub bytes: i64,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct QueueItem {
+    pub bucket: String,
+    pub key: String,
+    pub version_id: String,
+    /// "put" or "delete".
+    pub op: String,
+    pub target: String,
+    pub attempts: u32,
+    pub next_at: DateTime<Utc>,
+    pub last_error: Option<String>,
 }
 
 #[derive(Debug, Default)]
@@ -141,13 +217,26 @@ pub struct DeleteOutcome {
     pub version_id: Option<String>,
     /// True if a delete marker was created or removed.
     pub delete_marker: bool,
-    pub removed: Vec<BlobRef>,
+    /// The delete marker that was created, if any.
+    pub marker: Option<ObjectVersion>,
+    pub removed: Vec<ObjectVersion>,
+}
+
+/// What `scan` should do after visiting a version.
+pub enum Scan {
+    Next,
+    Stop,
+    /// Continue from this key (bytes), skipping everything before it.
+    Seek(Vec<u8>),
 }
 
 pub struct Store {
     db: Database,
-    meta_dir: PathBuf,
     seq: AtomicU64,
+    /// Signalled when bucket configs or keys change (persisted to every disk).
+    pub sys_changed: Notify,
+    /// True when the database was created by this process (index may need rebuilding).
+    pub fresh: bool,
 }
 
 fn de<T: DeserializeOwned>(b: &[u8]) -> Result<T> {
@@ -179,13 +268,10 @@ fn key_range(bucket: &str, key: &str) -> (Vec<u8>, Vec<u8>) {
     (s, e)
 }
 
-fn bucket_range(bucket: &str, from_key: &str) -> (Vec<u8>, Vec<u8>) {
+fn bucket_prefix(bucket: &str) -> Vec<u8> {
     let mut s = bucket.as_bytes().to_vec();
     s.push(0);
-    s.extend_from_slice(from_key.as_bytes());
-    let mut e = bucket.as_bytes().to_vec();
-    e.push(1);
-    (s, e)
+    s
 }
 
 type Entries = Vec<(Vec<u8>, ObjectVersion)>;
@@ -203,50 +289,75 @@ where
     Ok(out)
 }
 
+fn latest_live<T>(t: &T, bucket: &str, key: &str) -> Result<bool>
+where
+    T: ReadableTable<&'static [u8], &'static [u8]>,
+{
+    let (s, e) = key_range(bucket, key);
+    match t.range(s.as_slice()..e.as_slice())?.next() {
+        Some(item) => {
+            let (_, v) = item?;
+            Ok(!de::<ObjectVersion>(v.value())?.delete_marker)
+        }
+        None => Ok(false),
+    }
+}
+
+fn bump_seq(tx: &redb::WriteTransaction, seq: u64) -> Result<()> {
+    let mut t = tx.open_table(META)?;
+    let cur = t.get("seq")?.map(|g| g.value()).unwrap_or(0);
+    if seq > cur {
+        t.insert("seq", seq)?;
+    }
+    Ok(())
+}
+
+fn adjust(t: &mut redb::Table<&str, &[u8]>, bucket: &str, objects: i64, versions: i64, bytes: i64) -> Result<()> {
+    if objects == 0 && versions == 0 && bytes == 0 {
+        return Ok(());
+    }
+    let cur = t.get(bucket)?.map(|g| de::<Stats>(g.value())).transpose()?;
+    let mut s = cur.unwrap_or_default();
+    s.objects += objects;
+    s.versions += versions;
+    s.bytes += bytes;
+    t.insert(bucket, ser(&s).as_slice())?;
+    Ok(())
+}
+
 pub fn valid_object_key(key: &str) -> bool {
     !key.is_empty() && key.len() <= 1024 && !key.contains('\0')
 }
 
 impl Store {
-    pub fn open(root: &Path) -> std::result::Result<Store, String> {
-        let meta_dir = root.join(".boxspace");
-        for d in ["tmp", "blobs", "uploads"] {
-            std::fs::create_dir_all(meta_dir.join(d)).map_err(|e| format!("{}: {e}", meta_dir.join(d).display()))?;
-        }
-        // Leftovers from interrupted uploads.
-        if let Ok(rd) = std::fs::read_dir(meta_dir.join("tmp")) {
-            for e in rd.flatten() {
-                let _ = std::fs::remove_file(e.path());
-            }
-        }
-        let db = Database::create(meta_dir.join("meta.redb")).map_err(|e| e.to_string())?;
+    pub fn open(meta_dir: &Path) -> std::result::Result<Store, String> {
+        let path = meta_dir.join("meta.redb");
+        let fresh = !path.exists();
+        let db = Database::create(&path).map_err(|e| e.to_string())?;
         let tx = db.begin_write().map_err(|e| e.to_string())?;
         {
             tx.open_table(BUCKETS).map_err(|e| e.to_string())?;
             tx.open_table(OBJECTS).map_err(|e| e.to_string())?;
             tx.open_table(UPLOADS).map_err(|e| e.to_string())?;
             tx.open_table(KEYS).map_err(|e| e.to_string())?;
+            tx.open_table(STATS).map_err(|e| e.to_string())?;
+            tx.open_table(QUEUE).map_err(|e| e.to_string())?;
+            tx.open_table(META).map_err(|e| e.to_string())?;
         }
         tx.commit().map_err(|e| e.to_string())?;
+        let stored_seq = {
+            let tx = db.begin_read().map_err(|e| e.to_string())?;
+            let t = tx.open_table(META).map_err(|e| e.to_string())?;
+            let v = t.get("seq").map_err(|e| e.to_string())?.map(|g| g.value()).unwrap_or(0);
+            v
+        };
         let now = Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64;
-        Ok(Store { db, meta_dir, seq: AtomicU64::new(now) })
-    }
-
-    pub fn meta_dir(&self) -> &Path {
-        &self.meta_dir
-    }
-
-    pub fn abs(&self, rel: &str) -> PathBuf {
-        self.meta_dir.join(rel)
-    }
-
-    pub fn tmp_path(&self) -> PathBuf {
-        self.meta_dir.join("tmp").join(uuid::Uuid::new_v4().simple().to_string())
-    }
-
-    pub fn new_blob_rel(&self, bucket: &str) -> String {
-        let id = uuid::Uuid::new_v4().simple().to_string();
-        format!("blobs/{bucket}/{}/{id}", &id[..2])
+        if stored_seq > now {
+            tracing::warn!("o relógio do sistema está atrás do último registro gravado; mantendo a ordem das versões");
+        }
+        let store = Store { db, seq: AtomicU64::new(now.max(stored_seq)), sys_changed: Notify::new(), fresh };
+        store.migrate_stats().map_err(|e| e.message)?;
+        Ok(store)
     }
 
     fn next_seq(&self) -> u64 {
@@ -256,6 +367,10 @@ impl Store {
             .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |cur| Some(std::cmp::max(cur + 1, now)))
             .expect("closure always returns Some");
         std::cmp::max(prev + 1, now)
+    }
+
+    pub fn new_oid() -> String {
+        uuid::Uuid::new_v4().simple().to_string()
     }
 
     // ---------------- buckets ----------------
@@ -278,6 +393,7 @@ impl Store {
             t.insert(name, ser(&bm).as_slice())?;
         }
         tx.commit()?;
+        self.sys_changed.notify_one();
         Ok(bm)
     }
 
@@ -318,48 +434,54 @@ impl Store {
             bm = m;
         }
         tx.commit()?;
+        self.sys_changed.notify_one();
         Ok(bm)
     }
 
-    /// Delete an empty bucket. In-progress multipart uploads are discarded;
-    /// returns their ids so the caller can remove the part files.
-    pub fn delete_bucket(&self, name: &str) -> Result<Vec<String>> {
+    /// Delete an empty bucket. In-progress multipart uploads are discarded
+    /// and returned so the caller can remove their parts.
+    pub fn delete_bucket(&self, name: &str) -> Result<Vec<UploadMeta>> {
         let tx = self.db.begin_write()?;
-        let mut upload_ids = Vec::new();
+        let mut removed = Vec::new();
         {
             let mut buckets = tx.open_table(BUCKETS)?;
             if buckets.get(name)?.is_none() {
                 return Err(S3Error::no_such_bucket(name));
             }
             let objs = tx.open_table(OBJECTS)?;
-            let (s, e) = bucket_range(name, "");
+            let s = bucket_prefix(name);
+            let mut e = name.as_bytes().to_vec();
+            e.push(1);
             if objs.range(s.as_slice()..e.as_slice())?.next().is_some() {
                 return Err(S3Error::new("BucketNotEmpty", 409, "The bucket you tried to delete is not empty").resource(name));
             }
             let mut uploads = tx.open_table(UPLOADS)?;
             for item in uploads.iter()? {
-                let (k, v) = item?;
+                let (_, v) = item?;
                 let u: UploadMeta = de(v.value())?;
                 if u.bucket == name {
-                    upload_ids.push(k.value().to_string());
+                    removed.push(u);
                 }
             }
-            for id in &upload_ids {
-                uploads.remove(id.as_str())?;
+            for u in &removed {
+                uploads.remove(u.upload_id.as_str())?;
             }
             buckets.remove(name)?;
+            tx.open_table(STATS)?.remove(name)?;
         }
         tx.commit()?;
-        Ok(upload_ids)
+        self.sys_changed.notify_one();
+        Ok(removed)
     }
 
     // ---------------- objects ----------------
 
     /// Store a new version according to the bucket's versioning state.
-    /// Returns the stored version and blobs that are no longer referenced.
-    pub fn put_version(&self, bucket: &str, mut v: ObjectVersion) -> Result<(ObjectVersion, Vec<BlobRef>)> {
+    /// Returns the stored version and versions that were replaced (the old
+    /// "null" version when versioning is off or suspended).
+    pub fn put_version(&self, bucket: &str, mut v: ObjectVersion) -> Result<(ObjectVersion, Vec<ObjectVersion>)> {
         let tx = self.db.begin_write()?;
-        let mut garbage = Vec::new();
+        let mut replaced = Vec::new();
         {
             let buckets = tx.open_table(BUCKETS)?;
             let bm: BucketMeta = match buckets.get(bucket)? {
@@ -367,7 +489,11 @@ impl Store {
                 None => return Err(S3Error::no_such_bucket(bucket)),
             };
             let mut objs = tx.open_table(OBJECTS)?;
+            let before = latest_live(&objs, bucket, &v.key)?;
             v.seq = self.next_seq();
+            if v.oid.is_empty() {
+                v.oid = Self::new_oid();
+            }
             if bm.versioning_enabled() {
                 v.version_id = uuid::Uuid::new_v4().to_string();
             } else {
@@ -375,14 +501,36 @@ impl Store {
                 for (k, old) in versions_of(&objs, bucket, &v.key)? {
                     if old.version_id == NULL_VERSION {
                         objs.remove(k.as_slice())?;
-                        garbage.extend(old.blob);
+                        replaced.push(old);
                     }
                 }
             }
             objs.insert(okey(bucket, &v.key, v.seq).as_slice(), ser(&v).as_slice())?;
+            let after = latest_live(&objs, bucket, &v.key)?;
+            let dbytes = v.size as i64 - replaced.iter().map(|r| r.size as i64).sum::<i64>();
+            let dversions = 1 - replaced.len() as i64;
+            adjust(&mut tx.open_table(STATS)?, bucket, after as i64 - before as i64, dversions, dbytes)?;
         }
+        bump_seq(&tx, v.seq)?;
         tx.commit()?;
-        Ok((v, garbage))
+        Ok((v, replaced))
+    }
+
+    /// Insert a version exactly as described (index rebuild).
+    pub fn import_version(&self, bucket: &str, v: &ObjectVersion) -> Result<()> {
+        let tx = self.db.begin_write()?;
+        tx.open_table(OBJECTS)?.insert(okey(bucket, &v.key, v.seq).as_slice(), ser(v).as_slice())?;
+        bump_seq(&tx, v.seq)?;
+        tx.commit()?;
+        self.seq.fetch_max(v.seq, Ordering::SeqCst);
+        Ok(())
+    }
+
+    pub fn import_bucket(&self, bm: &BucketMeta) -> Result<()> {
+        let tx = self.db.begin_write()?;
+        tx.open_table(BUCKETS)?.insert(bm.name.as_str(), ser(bm).as_slice())?;
+        tx.commit()?;
+        Ok(())
     }
 
     /// Latest version (may be a delete marker) or a specific version.
@@ -412,13 +560,14 @@ impl Store {
                 None => return Err(S3Error::no_such_bucket(bucket)),
             };
             let mut objs = tx.open_table(OBJECTS)?;
+            let before = latest_live(&objs, bucket, key)?;
             let versions = versions_of(&objs, bucket, key)?;
             match version_id {
                 Some(id) => {
                     if let Some((k, v)) = versions.into_iter().find(|(_, v)| v.version_id == id) {
                         objs.remove(k.as_slice())?;
                         out.delete_marker = v.delete_marker;
-                        out.removed.extend(v.blob);
+                        out.removed.push(v);
                     }
                     out.version_id = Some(id.to_string());
                 }
@@ -428,13 +577,13 @@ impl Store {
                         Some(_) => Some(NULL_VERSION.to_string()),
                         None => None,
                     };
-                    if marker_id.as_deref() != Some(NULL_VERSION) && marker_id.is_some() {
-                        // Versioning enabled: keep everything, add a marker.
-                    } else {
+                    // With versioning enabled everything is kept; otherwise
+                    // the "null" version is replaced.
+                    if !bm.versioning_enabled() {
                         for (k, v) in versions {
                             if v.version_id == NULL_VERSION {
                                 objs.remove(k.as_slice())?;
-                                out.removed.extend(v.blob);
+                                out.removed.push(v);
                             }
                         }
                     }
@@ -442,6 +591,7 @@ impl Store {
                         let m = ObjectVersion {
                             key: key.to_string(),
                             version_id: id.clone(),
+                            oid: Self::new_oid(),
                             seq: self.next_seq(),
                             delete_marker: true,
                             last_modified: Utc::now(),
@@ -450,9 +600,17 @@ impl Store {
                         objs.insert(okey(bucket, key, m.seq).as_slice(), ser(&m).as_slice())?;
                         out.version_id = Some(id);
                         out.delete_marker = true;
+                        out.marker = Some(m);
                     }
                 }
             }
+            let after = latest_live(&objs, bucket, key)?;
+            let dversions = out.marker.is_some() as i64 - out.removed.len() as i64;
+            let dbytes = -out.removed.iter().map(|r| r.size as i64).sum::<i64>();
+            adjust(&mut tx.open_table(STATS)?, bucket, after as i64 - before as i64, dversions, dbytes)?;
+        }
+        if let Some(m) = &out.marker {
+            bump_seq(&tx, m.seq)?;
         }
         tx.commit()?;
         Ok(out)
@@ -483,19 +641,78 @@ impl Store {
         Ok(result)
     }
 
-    /// Iterate over all versions in a bucket starting at `from_key`
-    /// (inclusive, by prefix ordering). The callback returns false to stop.
+    /// Visit versions in a bucket in key order (newest version first per
+    /// key), starting at `from_key`. The callback can stop or seek ahead.
     pub fn scan<F>(&self, bucket: &str, from_key: &str, mut f: F) -> Result<()>
     where
-        F: FnMut(ObjectVersion) -> bool,
+        F: FnMut(ObjectVersion) -> Scan,
     {
         let tx = self.db.begin_read()?;
         let t = tx.open_table(OBJECTS)?;
-        let (s, e) = bucket_range(bucket, from_key);
-        for item in t.range(s.as_slice()..e.as_slice())? {
-            let (_, v) = item?;
-            if !f(de(v.value())?) {
-                break;
+        let mut end = bucket.as_bytes().to_vec();
+        end.push(1);
+        let mut start = bucket_prefix(bucket);
+        start.extend_from_slice(from_key.as_bytes());
+        'outer: loop {
+            for item in t.range(start.as_slice()..end.as_slice())? {
+                let (_, v) = item?;
+                match f(de(v.value())?) {
+                    Scan::Next => {}
+                    Scan::Stop => break 'outer,
+                    Scan::Seek(k) => {
+                        let mut s = bucket_prefix(bucket);
+                        s.extend_from_slice(&k);
+                        if s.as_slice() <= start.as_slice() {
+                            continue; // never go backwards
+                        }
+                        start = s;
+                        continue 'outer;
+                    }
+                }
+            }
+            break;
+        }
+        Ok(())
+    }
+
+    // ---------------- stats ----------------
+
+    pub fn stats(&self, bucket: &str) -> Result<Stats> {
+        let tx = self.db.begin_read()?;
+        let t = tx.open_table(STATS)?;
+        let r = t.get(bucket)?;
+        Ok(r.map(|g| de(g.value())).transpose()?.unwrap_or_default())
+    }
+
+    /// Recompute a bucket's counters from scratch.
+    pub fn recount(&self, bucket: &str) -> Result<Stats> {
+        let mut s = Stats::default();
+        let mut last: Option<String> = None;
+        self.scan(bucket, "", |v| {
+            if last.as_deref() != Some(v.key.as_str()) {
+                if !v.delete_marker {
+                    s.objects += 1;
+                }
+                last = Some(v.key);
+            }
+            s.versions += 1;
+            s.bytes += v.size as i64;
+            Scan::Next
+        })?;
+        let tx = self.db.begin_write()?;
+        tx.open_table(STATS)?.insert(bucket, ser(&s).as_slice())?;
+        tx.commit()?;
+        Ok(s)
+    }
+
+    fn migrate_stats(&self) -> Result<()> {
+        let empty = {
+            let tx = self.db.begin_read()?;
+            tx.open_table(STATS)?.len()? == 0
+        };
+        if empty {
+            for b in self.list_buckets()? {
+                self.recount(&b.name)?;
             }
         }
         Ok(())
@@ -583,6 +800,7 @@ impl Store {
         let tx = self.db.begin_write()?;
         tx.open_table(KEYS)?.insert(k.access_key.as_str(), ser(k).as_slice())?;
         tx.commit()?;
+        self.sys_changed.notify_one();
         Ok(())
     }
 
@@ -590,26 +808,47 @@ impl Store {
         let tx = self.db.begin_write()?;
         let existed = tx.open_table(KEYS)?.remove(ak)?.is_some();
         tx.commit()?;
+        self.sys_changed.notify_one();
         Ok(existed)
     }
 
-    // ---------------- stats ----------------
+    // ---------------- replication queue ----------------
 
-    /// (current objects, bytes stored across all versions)
-    pub fn bucket_usage(&self, bucket: &str) -> Result<(u64, u64)> {
-        let (mut objects, mut bytes) = (0u64, 0u64);
-        let mut last: Option<String> = None;
-        self.scan(bucket, "", |v| {
-            let latest = last.as_deref() != Some(v.key.as_str());
-            if latest {
-                last = Some(v.key.clone());
-                if !v.delete_marker {
-                    objects += 1;
+    pub fn enqueue(&self, item: &QueueItem) -> Result<()> {
+        let tx = self.db.begin_write()?;
+        tx.open_table(QUEUE)?.insert(self.next_seq(), ser(item).as_slice())?;
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn queue_items(&self, limit: usize) -> Result<Vec<(u64, QueueItem)>> {
+        let tx = self.db.begin_read()?;
+        let t = tx.open_table(QUEUE)?;
+        let mut out = Vec::new();
+        for item in t.iter()? {
+            let (k, v) = item?;
+            out.push((k.value(), de(v.value())?));
+            if out.len() >= limit {
+                break;
+            }
+        }
+        Ok(out)
+    }
+
+    pub fn queue_update(&self, id: u64, item: Option<&QueueItem>) -> Result<()> {
+        let tx = self.db.begin_write()?;
+        {
+            let mut t = tx.open_table(QUEUE)?;
+            match item {
+                Some(i) => {
+                    t.insert(id, ser(i).as_slice())?;
+                }
+                None => {
+                    t.remove(id)?;
                 }
             }
-            bytes += v.size;
-            true
-        })?;
-        Ok((objects, bytes))
+        }
+        tx.commit()?;
+        Ok(())
     }
 }

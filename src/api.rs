@@ -1,10 +1,10 @@
 //! S3 REST API: request routing and operation handlers.
 
-use std::{collections::BTreeMap, io, sync::Arc};
+use std::{collections::BTreeMap, io, net::SocketAddr, sync::Arc, time::Instant};
 
 use axum::{
     body::Body,
-    extract::{Request, State},
+    extract::{ConnectInfo, Request, State},
     http::{request::Parts, HeaderMap, Method, StatusCode},
     response::Response,
 };
@@ -15,13 +15,14 @@ use futures::{Stream, TryStreamExt};
 use serde::{de::DeserializeOwned, Deserialize};
 
 use crate::{
+    audit,
     auth::{self, AuthInfo, Payload},
-    blob::{self, BlobWriter},
-    body, cors,
+    blob, body, cors,
     error::{Result, S3Error},
     lifecycle, listing,
     ops::{self, PutOpts, DEFAULT_CONTENT_TYPE},
     policy,
+    replication::REPLICA_HEADER,
     storage::{ObjectVersion, PartMeta, UploadMeta, NULL_VERSION},
     util::{decode, esc, header, http_date, iso8601, md5_bytes, parse_http_date, random_hex, set_header, uri_encode, Query, S3_NS, XML_DECL},
     App,
@@ -35,20 +36,44 @@ type Target = (Option<String>, Option<String>);
 
 // ---------------------------------------------------------------- entry ----
 
-pub async fn handle(State(app): State<Arc<App>>, req: Request) -> Response {
+/// Client address, honouring X-Forwarded-For when configured.
+pub fn client_ip(app: &App, headers: &HeaderMap, peer: SocketAddr) -> String {
+    if app.cfg.trust_proxy
+        && let Some(f) = header(headers, "x-forwarded-for").and_then(|v| v.split(',').next())
+    {
+        return f.trim().to_string();
+    }
+    peer.ip().to_string()
+}
+
+pub async fn handle(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, req: Request) -> Response {
+    if req.uri().path().starts_with("/_boxspace/") {
+        return system(&app, req);
+    }
+    let started = Instant::now();
     let rid = random_hex(8).to_uppercase();
     let (parts, body) = req.into_parts();
     let method = parts.method.clone();
     let head = method == Method::HEAD;
     let target = target(&app, &parts);
+    let op = op_name(&parts, &target);
     let origin = header(&parts.headers, "origin").map(str::to_string);
+    let remote = client_ip(&app, &parts.headers, peer);
+    let user_agent = header(&parts.headers, "user-agent").map(str::to_string);
+    let bytes_in = header(&parts.headers, "x-amz-decoded-content-length")
+        .or_else(|| header(&parts.headers, "content-length"))
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0u64);
     tracing::debug!("{} {}", method, parts.uri);
-    let mut resp = match route(&app, parts, body, &target).await {
+    let mut access_key = None;
+    let mut error = None;
+    let mut resp = match route(&app, parts, body, &target, &mut access_key).await {
         Ok(r) => r,
         Err(e) => {
             if e.status.is_server_error() {
                 tracing::warn!("{} {:?}: {} {}", method, target, e.code, e.message);
             }
+            error = Some(e.code.to_string());
             e.to_response(head, &rid)
         }
     };
@@ -60,7 +85,133 @@ pub async fn handle(State(app): State<Arc<App>>, req: Request) -> Response {
     let h = resp.headers_mut();
     set_header(h, "x-amz-request-id", &rid);
     set_header(h, "server", "BoxSpace");
+    let status = resp.status().as_u16();
+    let bytes_out = if head { 0 } else { header(resp.headers(), "content-length").and_then(|v| v.parse().ok()).unwrap_or(0u64) };
+    let elapsed = started.elapsed();
+    app.metrics.record(op, status, elapsed.as_secs_f64(), bytes_in, bytes_out);
+    app.audit.log(audit::Entry {
+        time: Utc::now(),
+        request_id: rid,
+        source: "s3".into(),
+        op: op.to_string(),
+        method: method.to_string(),
+        bucket: target.0,
+        key: target.1,
+        status,
+        access_key,
+        remote,
+        bytes_in,
+        bytes_out,
+        duration_ms: elapsed.as_millis() as u64,
+        user_agent,
+        error,
+    });
     resp
+}
+
+/// `/_boxspace/health`, `/_boxspace/health/live` and `/_boxspace/metrics`.
+fn system(app: &App, req: Request) -> Response {
+    let text = |code: u16, ctype: &str, body: String| {
+        let mut r = Response::new(Body::from(body));
+        *r.status_mut() = StatusCode::from_u16(code).unwrap_or(StatusCode::OK);
+        set_header(r.headers_mut(), "content-type", ctype);
+        set_header(r.headers_mut(), "cache-control", "no-store");
+        r
+    };
+    match req.uri().path() {
+        "/_boxspace/health/live" => text(200, "text/plain", "ok\n".into()),
+        "/_boxspace/health" => {
+            let online = app.disks.online_count();
+            let ok = app.disks.writable();
+            let body = serde_json::json!({
+                "status": if ok { "ok" } else { "degraded" },
+                "disksOnline": online,
+                "disks": app.disks.list.len(),
+                "mode": app.disks.mode.label(),
+                "writable": ok,
+            });
+            text(if ok { 200 } else { 503 }, "application/json", body.to_string())
+        }
+        "/_boxspace/metrics" => {
+            let authorized = app.cfg.metrics_public
+                || app.cfg.metrics_token.as_deref().is_some_and(|t| {
+                    header(req.headers(), "authorization").and_then(|a| a.strip_prefix("Bearer ")).is_some_and(|got| crate::util::ct_eq(got.as_bytes(), t.as_bytes()))
+                });
+            if authorized {
+                text(200, "text/plain; version=0.0.4", app.metrics.render(app))
+            } else {
+                text(403, "text/plain", "Defina BOXSPACE_METRICS_TOKEN e envie Authorization: Bearer <token>, ou BOXSPACE_METRICS_PUBLIC=1.\n".into())
+            }
+        }
+        _ => text(404, "text/plain", "not found\n".into()),
+    }
+}
+
+/// S3 operation name for metrics and audit.
+fn op_name(parts: &Parts, target: &Target) -> &'static str {
+    let q = Query::parse(parts.uri.query());
+    let m = &parts.method;
+    let has = |k: &str| q.has(k);
+    match (target, m.as_str()) {
+        (_, "OPTIONS") => "PreflightCORS",
+        ((None, _), _) => "ListBuckets",
+        ((Some(_), None), method) => {
+            let sub = ["versioning", "policy", "lifecycle", "cors", "tagging", "encryption", "acl", "location", "notification", "object-lock"]
+                .into_iter()
+                .find(|s| has(s));
+            match (method, sub) {
+                ("GET", Some("versioning")) => "GetBucketVersioning",
+                ("PUT", Some("versioning")) => "PutBucketVersioning",
+                ("GET", Some("policy")) => "GetBucketPolicy",
+                ("PUT", Some("policy")) => "PutBucketPolicy",
+                ("DELETE", Some("policy")) => "DeleteBucketPolicy",
+                ("GET", Some("lifecycle")) => "GetBucketLifecycle",
+                ("PUT", Some("lifecycle")) => "PutBucketLifecycle",
+                ("DELETE", Some("lifecycle")) => "DeleteBucketLifecycle",
+                ("GET", Some("cors")) => "GetBucketCors",
+                ("PUT", Some("cors")) => "PutBucketCors",
+                ("DELETE", Some("cors")) => "DeleteBucketCors",
+                ("GET", Some("tagging")) => "GetBucketTagging",
+                ("PUT", Some("tagging")) => "PutBucketTagging",
+                ("DELETE", Some("tagging")) => "DeleteBucketTagging",
+                ("GET", Some("encryption")) => "GetBucketEncryption",
+                ("PUT", Some("encryption")) => "PutBucketEncryption",
+                ("DELETE", Some("encryption")) => "DeleteBucketEncryption",
+                ("GET", Some("acl")) => "GetBucketAcl",
+                ("PUT", Some("acl")) => "PutBucketAcl",
+                ("GET", Some("location")) => "GetBucketLocation",
+                (_, Some(_)) => "BucketConfig",
+                ("GET", None) if has("uploads") => "ListMultipartUploads",
+                ("GET", None) if has("versions") => "ListObjectVersions",
+                ("GET", None) if q.get("list-type") == Some("2") => "ListObjectsV2",
+                ("GET", None) => "ListObjects",
+                ("HEAD", None) => "HeadBucket",
+                ("PUT", None) => "CreateBucket",
+                ("DELETE", None) => "DeleteBucket",
+                ("POST", None) if has("delete") => "DeleteObjects",
+                _ => "Other",
+            }
+        }
+        ((Some(_), Some(_)), method) => match method {
+            "GET" if has("tagging") => "GetObjectTagging",
+            "GET" if has("uploadId") => "ListParts",
+            "GET" if has("acl") => "GetObjectAcl",
+            "GET" => "GetObject",
+            "HEAD" => "HeadObject",
+            "PUT" if has("tagging") => "PutObjectTagging",
+            "PUT" if has("acl") => "PutObjectAcl",
+            "PUT" if has("uploadId") && parts.headers.contains_key("x-amz-copy-source") => "UploadPartCopy",
+            "PUT" if has("uploadId") => "UploadPart",
+            "PUT" if parts.headers.contains_key("x-amz-copy-source") => "CopyObject",
+            "PUT" => "PutObject",
+            "DELETE" if has("uploadId") => "AbortMultipartUpload",
+            "DELETE" if has("tagging") => "DeleteObjectTagging",
+            "DELETE" => "DeleteObject",
+            "POST" if has("uploads") => "CreateMultipartUpload",
+            "POST" if has("uploadId") => "CompleteMultipartUpload",
+            _ => "Other",
+        },
+    }
 }
 
 fn target(app: &App, parts: &Parts) -> Target {
@@ -91,15 +242,19 @@ struct Ctx<'a> {
     headers: HeaderMap,
     q: Query,
     auth: AuthInfo,
+    /// The request was sent by another BoxSpace's replication.
+    replica: bool,
 }
 
-async fn route(app: &Arc<App>, parts: Parts, body: Body, target: &Target) -> Result<Response> {
+async fn route(app: &Arc<App>, parts: Parts, body: Body, target: &Target, access_key: &mut Option<String>) -> Result<Response> {
     let q = Query::parse(parts.uri.query());
     if parts.method == Method::OPTIONS {
         return cors::preflight(app, target.0.as_deref(), &parts.headers);
     }
     let auth = auth::authenticate(app, &parts.method, &parts.uri, &parts.headers, &q)?;
-    let ctx = Ctx { app, method: parts.method, headers: parts.headers, q, auth };
+    *access_key = auth.identity.as_ref().map(|i| i.access_key.clone());
+    let replica = auth.identity.is_some() && header(&parts.headers, REPLICA_HEADER) == Some("1");
+    let ctx = Ctx { app, method: parts.method, headers: parts.headers, q, auth, replica };
     match target {
         (None, _) if ctx.method == Method::GET => list_buckets(&ctx),
         (None, _) => Err(S3Error::method_not_allowed()),
@@ -108,21 +263,23 @@ async fn route(app: &Arc<App>, parts: Parts, body: Body, target: &Target) -> Res
     }
 }
 
+/// Reads are Get*/List*; everything else changes data.
+fn is_read_action(action: &str) -> bool {
+    action.starts_with("s3:Get") || action.starts_with("s3:List")
+}
+
 impl Ctx<'_> {
     fn h(&self, n: &str) -> Option<&str> {
         header(&self.headers, n)
     }
 
-    fn is_write(&self) -> bool {
-        !(self.method == Method::GET || self.method == Method::HEAD)
-    }
-
-    /// Authorize `action`. Access keys act as the owner (read-only keys can
-    /// only read); anonymous requests need a bucket policy allowing it.
+    /// Authorize `action`. Access keys act as the owner within their grants
+    /// (read-only keys can only read); anonymous requests need a bucket
+    /// policy allowing the action.
     fn authorize(&self, action: &str, bucket: &str, key: Option<&str>) -> Result<()> {
         match &self.auth.identity {
-            Some(id) if self.is_write() && id.read_only => Err(S3Error::access_denied()),
-            Some(_) => Ok(()),
+            Some(id) if id.can(bucket, !is_read_action(action)) => Ok(()),
+            Some(_) => Err(S3Error::access_denied()),
             None => {
                 let bm = self.app.store.get_bucket(bucket)?.ok_or_else(S3Error::access_denied)?;
                 let res = match key {
@@ -138,10 +295,10 @@ impl Ctx<'_> {
         }
     }
 
-    /// Bucket configuration is only changeable by authenticated owners.
+    /// Changing bucket settings requires an unrestricted read-write key.
     fn authorize_owner(&self, bucket: &str) -> Result<()> {
         match &self.auth.identity {
-            Some(id) if !(self.is_write() && id.read_only) => {
+            Some(id) if id.admin() => {
                 self.app.store.bucket(bucket)?;
                 Ok(())
             }
@@ -525,10 +682,8 @@ fn version_header(r: &mut Response, vid: &str) {
 // ------------------------------------------------------------ service ----
 
 fn list_buckets(ctx: &Ctx<'_>) -> Result<Response> {
-    if ctx.auth.identity.is_none() {
-        return Err(S3Error::access_denied());
-    }
-    let mut buckets = ctx.app.store.list_buckets()?;
+    let id = ctx.auth.identity.as_ref().ok_or_else(S3Error::access_denied)?;
+    let mut buckets: Vec<_> = ctx.app.store.list_buckets()?.into_iter().filter(|b| id.can(&b.name, false)).collect();
     buckets.sort_by(|a, b| a.name.cmp(&b.name));
     let items: String = buckets
         .iter()
@@ -951,7 +1106,7 @@ async fn bucket_put(ctx: &Ctx<'_>, b: &str, body: Body) -> Result<Response> {
         return Err(S3Error::new("InvalidBucketName", 400, "The specified bucket is not valid.").resource(b));
     }
     match &ctx.auth.identity {
-        Some(id) if !id.read_only => {}
+        Some(id) if id.admin() => {}
         _ => return Err(S3Error::access_denied()),
     }
     check_acl(ctx)?;
@@ -1024,7 +1179,7 @@ async fn delete_objects(ctx: &Ctx<'_>, b: &str, body: Body) -> Result<Response> 
         let vid = o.version_id.as_deref().filter(|v| !v.is_empty());
         let action = if vid.is_some() { "s3:DeleteObjectVersion" } else { "s3:DeleteObject" };
         let res = match ctx.authorize(action, b, Some(&o.key)).and_then(|_| ops::check_key(&o.key)) {
-            Ok(()) => ops::delete_object(ctx.app, &bm, &o.key, vid).await,
+            Ok(()) => ops::delete_object(ctx.app, &bm, &o.key, vid, ctx.replica).await,
             Err(e) => Err(e),
         };
         match res {
@@ -1092,7 +1247,7 @@ async fn object_op(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Respon
         Method::PUT if ctx.h("x-amz-copy-source").is_some() => copy_object(ctx, b, k).await,
         Method::PUT => put_object(ctx, b, k, body).await,
         Method::DELETE if q.has("uploadId") => abort_upload(ctx, b, k).await,
-        Method::DELETE if q.has("tagging") => delete_object_tagging(ctx, b, k),
+        Method::DELETE if q.has("tagging") => delete_object_tagging(ctx, b, k).await,
         Method::DELETE => delete_object(ctx, b, k).await,
         Method::POST if q.has("uploads") => create_upload(ctx, b, k),
         Method::POST if q.has("uploadId") => complete_upload(ctx, b, k, body).await,
@@ -1123,10 +1278,7 @@ async fn get_object(ctx: &Ctx<'_>, b: &str, k: &str, head: bool) -> Result<Respo
     };
     let (start, end) = range.unwrap_or((0, size.saturating_sub(1)));
     let len = if size == 0 { 0 } else { end - start + 1 };
-    let body = match (&v.blob, head || len == 0) {
-        (Some(blob), false) => Body::from_stream(blob::open(ctx.app, blob, start, end).await?),
-        _ => Body::empty(),
-    };
+    let body = if head || len == 0 { Body::empty() } else { Body::from_stream(blob::open(ctx.app, b, &v, start, end).await?) };
     let mut r = Response::new(body);
     *r.status_mut() = if range.is_some() { StatusCode::PARTIAL_CONTENT } else { StatusCode::OK };
     let h = r.headers_mut();
@@ -1156,7 +1308,8 @@ async fn put_object(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Respo
     ctx.app.store.bucket(b)?;
     check_acl(ctx)?;
     reject_object_lock(ctx)?;
-    let opts = put_opts(ctx)?;
+    let mut opts = put_opts(ctx)?;
+    opts.replica = ctx.replica;
     // Conditional writes.
     let inm = ctx.h("if-none-match");
     let im = ctx.h("if-match");
@@ -1203,8 +1356,7 @@ async fn copy_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
         ));
     }
     let encrypt = req.encrypt.unwrap_or(dest.encryption);
-    let rel = ctx.app.store.new_blob_rel(b);
-    let (blob, md5) = ops::copy_data(ctx.app, &src, None, &rel, encrypt).await?;
+    let (blob, md5) = ops::copy_data(ctx.app, &sb, &src, None, b, encrypt).await?;
     let (content_type, meta, headers) = if directive == "REPLACE" {
         (req.content_type.unwrap_or_else(|| DEFAULT_CONTENT_TYPE.into()), req.meta, req.headers)
     } else {
@@ -1222,7 +1374,7 @@ async fn copy_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
         blob: Some(blob),
         ..Default::default()
     };
-    let stored = ops::commit_version(ctx.app, &dest, v, "ObjectCreated:Copy").await?;
+    let stored = ops::commit_version(ctx.app, &dest, v, "ObjectCreated:Copy", ctx.replica).await?;
     let mut r = xml(format!(
         "<CopyObjectResult xmlns=\"{S3_NS}\"><LastModified>{}</LastModified><ETag>{}</ETag></CopyObjectResult>",
         iso8601(&stored.last_modified),
@@ -1238,12 +1390,12 @@ async fn copy_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
     Ok(r)
 }
 
-fn delete_object_tagging(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
+async fn delete_object_tagging(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
     let vid = ctx.q.get("versionId").filter(|v| !v.is_empty());
     ctx.authorize(if vid.is_some() { "s3:DeleteObjectVersionTagging" } else { "s3:DeleteObjectTagging" }, b, Some(k))?;
     ctx.app.store.bucket(b)?;
     lookup_version(ctx, b, k, vid)?;
-    let v = ctx.app.store.update_version(b, k, vid, |v| v.tags.clear())?.ok_or_else(|| S3Error::no_such_key(k))?;
+    let v = ops::set_tags(ctx.app, b, k, vid, Vec::new()).await?.ok_or_else(|| S3Error::no_such_key(k))?;
     let mut r = status(204);
     version_header(&mut r, &v.version_id);
     Ok(r)
@@ -1265,7 +1417,7 @@ async fn put_object_tagging(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Resu
     ctx.app.store.bucket(b)?;
     lookup_version(ctx, b, k, vid)?;
     let tags = parse_tagging(&ctx.read_body(body).await?, 10)?;
-    let v = ctx.app.store.update_version(b, k, vid, |v| v.tags = tags)?.ok_or_else(|| S3Error::no_such_key(k))?;
+    let v = ops::set_tags(ctx.app, b, k, vid, tags).await?.ok_or_else(|| S3Error::no_such_key(k))?;
     let mut r = status(200);
     version_header(&mut r, &v.version_id);
     Ok(r)
@@ -1276,7 +1428,7 @@ async fn delete_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
     ctx.authorize(if vid.is_some() { "s3:DeleteObjectVersion" } else { "s3:DeleteObject" }, b, Some(k))?;
     ops::check_key(k)?;
     let bm = ctx.app.store.bucket(b)?;
-    let out = ops::delete_object(ctx.app, &bm, k, vid).await?;
+    let out = ops::delete_object(ctx.app, &bm, k, vid, ctx.replica).await?;
     let mut r = status(204);
     if let Some(v) = &out.version_id {
         set_header(r.headers_mut(), "x-amz-version-id", v);
@@ -1314,7 +1466,6 @@ fn create_upload(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
         encrypt: o.encrypt.unwrap_or(bm.encryption),
         parts: BTreeMap::new(),
     };
-    std::fs::create_dir_all(ctx.app.store.abs(&format!("uploads/{id}")))?;
     ctx.app.store.put_upload(&u)?;
     let mut r = xml(format!(
         "<InitiateMultipartUploadResult xmlns=\"{S3_NS}\"><Bucket>{}</Bucket><Key>{}</Key><UploadId>{}</UploadId></InitiateMultipartUploadResult>",
@@ -1338,7 +1489,6 @@ async fn upload_part(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Resp
     ctx.authorize("s3:PutObject", b, Some(k))?;
     ctx.app.store.bucket(b)?;
     let up = upload_for(ctx, b, k)?;
-    let rel = format!("uploads/{}/{n}-{}", up.upload_id, uuid::Uuid::new_v4().simple());
     let copy = ctx.h("x-amz-copy-source").map(str::to_string);
     let (blob, md5) = if let Some(src) = &copy {
         let (sb, sk, svid) = parse_copy_source(src)?;
@@ -1350,17 +1500,21 @@ async fn upload_part(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Resp
             }
             None => None,
         };
-        ops::copy_data(ctx.app, &sv, range, &rel, up.encrypt).await?
+        ops::copy_data(ctx.app, &sb, &sv, range, b, up.encrypt).await?
     } else {
         let opts = put_opts(ctx)?;
-        ops::write_body(ctx.app, &rel, stream(body), &ctx.auth.payload, &opts, up.encrypt).await?
+        ops::write_body(ctx.app, b, stream(body), &ctx.auth.payload, &opts, up.encrypt).await?
     };
     let now = Utc::now();
     let part = PartMeta { etag: hex::encode(md5), size: blob.size, last_modified: now, blob: blob.clone() };
     match ctx.app.store.set_part(&up.upload_id, n, part) {
-        Ok(old) => blob::remove(ctx.app, old).await,
+        Ok(old) => {
+            if let Some(old) = old {
+                blob::remove_blob(ctx.app, b, &old).await;
+            }
+        }
         Err(e) => {
-            blob::remove(ctx.app, [blob]).await;
+            blob::remove_blob(ctx.app, b, &blob).await;
             return Err(e);
         }
     }
@@ -1410,56 +1564,67 @@ async fn complete_upload(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<
             "The list of parts was not in ascending order. Parts must be ordered by part number.",
         ));
     }
-    let mut chosen = Vec::with_capacity(req.parts.len());
-    let last = req.parts.len() - 1;
-    for (i, p) in req.parts.iter().enumerate() {
-        let invalid = || {
-            S3Error::new(
-                "InvalidPart",
-                400,
-                "One or more of the specified parts could not be found. The part may not have been uploaded, or the specified entity tag may not match the part's entity tag.",
-            )
-        };
-        let pm = up.parts.get(&p.number).ok_or_else(invalid)?;
-        if norm_etag(&p.etag) != pm.etag {
-            return Err(invalid());
+    // Claim the upload first and validate against exactly what was claimed:
+    // a part re-uploaded concurrently can then neither replace a part we use
+    // nor be deleted under us (its upload is gone, so its write fails).
+    let Some(claimed) = ctx.app.store.delete_upload(&up.upload_id)? else {
+        return Err(S3Error::no_such_upload());
+    };
+    let validated: Result<Vec<PartMeta>> = (|| {
+        let mut chosen = Vec::with_capacity(req.parts.len());
+        let last = req.parts.len() - 1;
+        for (i, p) in req.parts.iter().enumerate() {
+            let invalid = || {
+                S3Error::new(
+                    "InvalidPart",
+                    400,
+                    "One or more of the specified parts could not be found. The part may not have been uploaded, or the specified entity tag may not match the part's entity tag.",
+                )
+            };
+            let pm = claimed.parts.get(&p.number).ok_or_else(invalid)?;
+            if norm_etag(&p.etag) != pm.etag {
+                return Err(invalid());
+            }
+            if i < last && pm.size < MIN_PART {
+                return Err(S3Error::new("EntityTooSmall", 400, "Your proposed upload is smaller than the minimum allowed object size."));
+            }
+            chosen.push(pm.clone());
         }
-        if i < last && pm.size < MIN_PART {
-            return Err(S3Error::new("EntityTooSmall", 400, "Your proposed upload is smaller than the minimum allowed object size."));
+        Ok(chosen)
+    })();
+    let chosen = match validated {
+        Ok(c) => c,
+        Err(e) => {
+            // Give the upload back so the client can fix the request.
+            ctx.app.store.put_upload(&claimed)?;
+            return Err(e);
         }
-        chosen.push(pm.clone());
-    }
-    let mut w = BlobWriter::create(ctx.app, up.encrypt).await?;
-    for pm in &chosen {
-        w.pipe(blob::open_full(ctx.app, &pm.blob).await?).await?;
-    }
-    let rel = ctx.app.store.new_blob_rel(b);
-    let (blob, _) = w.finish(ctx.app, &rel).await?;
+    };
     let mut cat = Vec::with_capacity(chosen.len() * 16);
     for pm in &chosen {
         cat.extend(hex::decode(&pm.etag).map_err(S3Error::internal)?);
     }
     let etag = format!("{}-{}", hex::encode(md5_bytes(&cat)), chosen.len());
-    if ctx.app.store.delete_upload(&up.upload_id)?.is_none() {
-        blob::remove(ctx.app, [blob]).await;
-        return Err(S3Error::no_such_upload());
+    // Parts uploaded but not listed in the request are discarded.
+    for (n, p) in &claimed.parts {
+        if !req.parts.iter().any(|c| c.number == *n) {
+            blob::remove_blob(ctx.app, b, &p.blob).await;
+        }
     }
     let v = ObjectVersion {
         key: k.to_string(),
-        size: blob.size,
+        size: chosen.iter().map(|p| p.size).sum(),
         etag,
         last_modified: Utc::now(),
-        content_type: up.content_type.clone(),
-        meta: up.meta.clone(),
-        headers: up.headers.clone(),
-        tags: up.tags.clone(),
-        blob: Some(blob),
+        content_type: claimed.content_type.clone(),
+        meta: claimed.meta.clone(),
+        headers: claimed.headers.clone(),
+        tags: claimed.tags.clone(),
+        segments: chosen.iter().map(|p| p.blob.clone()).collect(),
         parts: Some(chosen.len() as u32),
         ..Default::default()
     };
-    let stored = ops::commit_version(ctx.app, &bm, v, "ObjectCreated:CompleteMultipartUpload").await;
-    let _ = tokio::fs::remove_dir_all(ctx.app.store.abs(&format!("uploads/{}", up.upload_id))).await;
-    let stored = stored?;
+    let stored = ops::commit_version(ctx.app, &bm, v, "ObjectCreated:CompleteMultipartUpload", ctx.replica).await?;
     let mut r = xml(format!(
         "<CompleteMultipartUploadResult xmlns=\"{S3_NS}\"><Location>{}</Location><Bucket>{}</Bucket><Key>{}</Key><ETag>{}</ETag></CompleteMultipartUploadResult>",
         esc(&format!("{}/{}/{}", ctx.app.cfg.server_url, b, uri_encode(k, false))),

@@ -34,5 +34,8 @@ USER 65532:65532
 VOLUME ["/data"]
 EXPOSE 9000 9001
 
+HEALTHCHECK --interval=30s --timeout=6s --start-period=10s --retries=3 \
+  CMD ["/usr/local/bin/boxspace", "healthcheck"]
+
 ENTRYPOINT ["/usr/local/bin/boxspace"]
 CMD ["server", "--address", ":9000", "--console-address", ":9001", "/data"]
