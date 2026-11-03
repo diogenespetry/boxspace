@@ -348,8 +348,7 @@ impl Store {
         let stored_seq = {
             let tx = db.begin_read().map_err(|e| e.to_string())?;
             let t = tx.open_table(META).map_err(|e| e.to_string())?;
-            let v = t.get("seq").map_err(|e| e.to_string())?.map(|g| g.value()).unwrap_or(0);
-            v
+            t.get("seq").map_err(|e| e.to_string())?.map(|g| g.value()).unwrap_or(0)
         };
         let now = Utc::now().timestamp_nanos_opt().unwrap_or(0) as u64;
         if stored_seq > now {
