@@ -60,9 +60,9 @@ jobs:
           import boto3
           s3 = boto3.client("s3", endpoint_url="http://localhost:9000", region_name="us-east-1",
                             aws_access_key_id="ciadmin", aws_secret_access_key="cisecret123")
-          s3.create_bucket(Bucket="ci")
-          s3.put_object(Bucket="ci", Key="ola.txt", Body=b"funciona")
-          assert s3.get_object(Bucket="ci", Key="ola.txt")["Body"].read() == b"funciona"
+          s3.create_bucket(Bucket="ci-teste")
+          s3.put_object(Bucket="ci-teste", Key="ola.txt", Body=b"funciona")
+          assert s3.get_object(Bucket="ci-teste", Key="ola.txt")["Body"].read() == b"funciona"
           print("container OK")
           EOF
 
