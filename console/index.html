@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BoxSpace</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='7' width='26' height='19' rx='2' fill='%231E4D6B'/%3E%3Crect x='3' y='7' width='26' height='5' fill='%23F2C230'/%3E%3C/svg%3E">
+<style>
+:root {
+  --steel: #1E4D6B;
+  --steel-deep: #163A51;
+  --steel-soft: #DCE6EE;
+  --concrete: #EDF0F2;
+  --surface: #FFFFFF;
+  --ink: #17222C;
+  --ink-2: #4C5A66;
+  --ink-3: #7B8792;
+  --line: #D5DBE0;
+  --mark: #F2C230;
+  --danger: #B8342A;
+  --ok: #2F7A4F;
+  --display: Bahnschrift, "DIN Alternate", "DIN 2014", "Roboto Condensed", system-ui, sans-serif;
+  --body: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --r: 6px;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font: 15px/1.5 var(--body); color: var(--ink); background: var(--concrete); -webkit-font-smoothing: antialiased; accent-color: var(--steel); }
+button, input, select, textarea { font: inherit; color: inherit; }
+a { color: var(--steel); }
+:focus-visible { outline: 3px solid var(--mark); outline-offset: 2px; }
+.num { font-variant-numeric: tabular-nums; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .01em; margin: 0; }
+h1 { font-size: 1.6rem; line-height: 1.2; }
+h2 { font-size: 1.2rem; }
+h3 { font-size: 1rem; }
+.muted { color: var(--ink-2); }
+.small { font-size: .85rem; }
+[hidden] { display: none !important; }
+
+/* buttons */
+.btn { display: inline-flex; align-items: center; gap: .4em; border: 1px solid var(--line); background: var(--surface); padding: .45em .9em; border-radius: var(--r); cursor: pointer; white-space: nowrap; }
+.btn:hover { border-color: var(--ink-3); }
+.btn.primary { background: var(--steel); border-color: var(--steel); color: #fff; }
+.btn.primary:hover { background: var(--steel-deep); }
+.btn.danger { color: var(--danger); }
+.btn.danger.solid { background: var(--danger); border-color: var(--danger); color: #fff; }
+.btn.link { border: 0; background: none; padding: .2em .35em; color: var(--steel); }
+.btn.link:hover { text-decoration: underline; }
+.btn[disabled] { opacity: .5; cursor: default; }
+.icon { width: 1.1em; height: 1.1em; flex: none; }
+
+/* login */
+.login { min-height: 100%; display: grid; place-items: center; padding: 24px; background: var(--steel); }
+.login form { width: min(380px, 100%); background: var(--surface); border-radius: 10px; padding: 32px; box-shadow: 0 20px 50px rgba(10, 30, 45, .35); }
+.login .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
+.login .brand h1 { font-size: 1.8rem; }
+.field { display: grid; gap: 4px; margin-bottom: 14px; }
+.field label { font-size: .85rem; color: var(--ink-2); }
+.field input, .field select, .field textarea { border: 1px solid var(--line); border-radius: var(--r); padding: .55em .7em; background: #fff; width: 100%; }
+.field textarea { font-family: var(--mono); font-size: .85rem; min-height: 220px; resize: vertical; }
+.err { color: var(--danger); font-size: .9rem; min-height: 1.4em; }
+
+/* shell */
+.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100%; }
+.rail { background: var(--steel); color: #fff; display: flex; flex-direction: column; padding: 18px 12px; position: sticky; top: 0; height: 100vh; align-self: start; }
+.rail .brand { display: flex; align-items: center; gap: 9px; padding: 4px 8px 22px; }
+.rail .brand span { font-family: var(--display); font-size: 1.35rem; font-weight: 600; }
+.rail nav { display: grid; gap: 2px; }
+.rail nav a { color: #DCE6EE; text-decoration: none; padding: 8px 10px; border-radius: var(--r); display: flex; gap: 10px; align-items: center; border-left: 4px solid transparent; }
+.rail nav a:hover { background: rgba(255,255,255,.08); color: #fff; }
+.rail nav a[aria-current="page"] { background: rgba(255,255,255,.12); color: #fff; border-left-color: var(--mark); }
+.rail .who { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid rgba(255,255,255,.15); font-size: .85rem; color: #C4D3DE; }
+.rail .who strong { color: #fff; display: block; font-weight: 600; word-break: break-all; }
+.rail .who .btn { margin-top: 8px; color: #fff; background: transparent; border-color: rgba(255,255,255,.3); }
+main { padding: 26px 32px 60px; min-width: 0; }
+.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
+.head .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.banner { background: #FFF4CC; border: 1px solid #E8CF70; border-radius: var(--r); padding: 10px 14px; margin-bottom: 18px; font-size: .92rem; }
+
+/* path: the floor marking */
+.path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; font-family: var(--display); font-size: 1.45rem; font-weight: 600; padding-bottom: 6px; border-bottom: 4px solid var(--mark); width: fit-content; max-width: 100%; }
+.path a { text-decoration: none; color: var(--ink-2); padding: 0 2px; border-radius: 3px; }
+.path a:hover { color: var(--steel); }
+.path .sep { color: var(--ink-3); padding: 0 4px; font-weight: 400; }
+.path .here { color: var(--ink); word-break: break-all; }
+.tabs { display: flex; gap: 4px; margin: 18px 0 0; border-bottom: 1px solid var(--line); }
+.tabs a { padding: 8px 14px; text-decoration: none; color: var(--ink-2); border-bottom: 3px solid transparent; margin-bottom: -1px; }
+.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--steel); font-weight: 600; }
+
+/* tables */
+.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 600; font-size: .82rem; color: var(--ink-2); padding: 10px 14px; border-bottom: 1px solid var(--line); background: #F7F9FA; }
+td { padding: 9px 14px; border-bottom: 1px solid #EBEEF1; vertical-align: middle; }
+tr:last-child td { border-bottom: 0; }
+tbody tr:hover { background: #F5F8FA; }
+td.r, th.r { text-align: right; }
+td.name { word-break: break-all; }
+td.name a { text-decoration: none; color: var(--ink); font-weight: 500; display: inline-flex; gap: 8px; align-items: center; }
+td.name a:hover { color: var(--steel); text-decoration: underline; }
+.row-actions { display: flex; gap: 2px; justify-content: flex-end; }
+.tag { display: inline-block; font-size: .78rem; padding: 1px 8px; border-radius: 99px; background: var(--steel-soft); color: var(--steel-deep); margin-right: 4px; white-space: nowrap; }
+.tag.warn { background: #FFF1C2; color: #6A5000; }
+.empty { padding: 48px 20px; text-align: center; color: var(--ink-2); }
+.empty h3 { color: var(--ink); margin-bottom: 6px; }
+.dropping .panel { outline: 3px dashed var(--steel); outline-offset: -3px; }
+.more { padding: 12px; text-align: center; border-top: 1px solid var(--line); }
+
+/* settings */
+.section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 22px; margin-top: 16px; }
+.section > p { margin: 4px 0 14px; color: var(--ink-2); max-width: 70ch; }
+.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+.switch input { width: 40px; height: 22px; appearance: none; background: #C7CFD6; border-radius: 99px; position: relative; cursor: pointer; transition: background .15s; flex: none; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch input:checked { background: var(--steel); }
+.switch input:checked::after { transform: translateX(18px); }
+.radios { display: grid; gap: 8px; margin-bottom: 12px; }
+.radios label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.radios input { margin-top: 4px; }
+.grid-rows { display: grid; gap: 8px; margin-bottom: 12px; }
+.rule { display: grid; grid-template-columns: 1.4fr repeat(3, .8fr) auto auto; gap: 8px; align-items: end; padding: 10px; background: #F7F9FA; border-radius: var(--r); }
+.hook { display: grid; grid-template-columns: 2fr 1.2fr .8fr .8fr auto; gap: 8px; align-items: end; padding: 10px; background: #F7F9FA; border-radius: var(--r); }
+.rule .field, .hook .field { margin: 0; }
+.rule input, .hook input, .hook select { padding: .4em .55em; }
+
+/* stats on about page */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 0; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
+.stats div { padding: 16px 20px; border-right: 1px solid var(--line); }
+.stats div:last-child { border-right: 0; }
+.stats b { display: block; font-family: var(--display); font-size: 1.7rem; font-weight: 600; }
+pre { background: #F3F5F7; border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; overflow: auto; font: .85rem/1.5 var(--mono); }
+code { font-family: var(--mono); font-size: .9em; }
+
+/* drawer */
+.drawer { position: fixed; inset: 0 0 0 auto; width: min(460px, 100%); background: var(--surface); border-left: 1px solid var(--line); transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s; z-index: 20; display: flex; flex-direction: column; }
+.drawer.open { transform: none; visibility: visible; box-shadow: -12px 0 30px rgba(10,30,45,.12); transition: transform .2s ease; }
+.drawer header { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.drawer header h2 { word-break: break-all; }
+.drawer .body { padding: 18px 20px; overflow: auto; flex: 1; }
+dl.kv { display: grid; grid-template-columns: 9em 1fr; gap: 6px 12px; margin: 0 0 18px; font-size: .92rem; }
+dl.kv dt { color: var(--ink-2); }
+dl.kv dd { margin: 0; word-break: break-all; }
+.versions li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #EBEEF1; font-size: .9rem; }
+.versions { list-style: none; padding: 0; margin: 8px 0 0; }
+
+/* dialogs */
+dialog { border: 0; border-radius: 10px; padding: 0; width: min(480px, calc(100% - 32px)); box-shadow: 0 24px 60px rgba(10,30,45,.3); }
+dialog::backdrop { background: rgba(20, 35, 48, .45); }
+dialog form { padding: 22px 24px; }
+dialog h2 { margin-bottom: 12px; }
+dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+.secret { font-family: var(--mono); background: #F3F5F7; border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; word-break: break-all; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+
+/* uploads + toasts */
+.uploads { position: fixed; right: 20px; bottom: 20px; width: min(360px, calc(100% - 40px)); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 30px rgba(10,30,45,.18); z-index: 30; }
+.uploads header { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
+.uploads ul { list-style: none; margin: 0; padding: 6px 14px 10px; max-height: 240px; overflow: auto; }
+.uploads li { padding: 6px 0; font-size: .88rem; }
+.uploads .bar { height: 4px; background: #E3E8EC; border-radius: 2px; overflow: hidden; margin-top: 4px; }
+.uploads .bar i { display: block; height: 100%; background: var(--steel); width: 0; transition: width .1s linear; }
+.uploads li.failed .bar i { background: var(--danger); }
+.uploads li.done .bar i { background: var(--ok); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: var(--r); z-index: 40; font-size: .92rem; max-width: calc(100% - 40px); }
+.toast.bad { background: var(--danger); }
+
+@media (max-width: 820px) {
+  .shell { grid-template-columns: 1fr; }
+  .rail { position: static; height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .rail .brand { padding: 0 8px 0 0; }
+  .rail nav { display: flex; }
+  .rail .who { margin: 0 0 0 auto; border: 0; padding: 0; display: flex; gap: 8px; align-items: center; }
+  .rail .who strong { display: none; }
+  .rail .who .btn { margin: 0; }
+  main { padding: 18px 14px 60px; }
+  .hide-sm { display: none; }
+  .panel thead { display: none; }
+  .panel tbody tr { display: grid; grid-template-columns: 1fr auto; align-items: center; border-bottom: 1px solid #EBEEF1; padding: 4px 0; }
+  .panel tbody tr:last-child { border-bottom: 0; }
+  .panel td { border: 0; padding: 4px 14px; }
+  .panel td.name { grid-column: 1 / -1; }
+  .panel td.r { text-align: left; }
+  .row-actions { justify-content: flex-end; flex-wrap: wrap; }
+  .rule, .hook { grid-template-columns: 1fr 1fr; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="app"></div>
+
+<dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-box" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M6 3h8l4 4v14H6zM14 3v4h4"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="m11 12 8-8m-3 3 2 2m-4 0 2 2"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path stroke="currentColor" stroke-width="1.8" d="M12 11v6M12 7.5v.5"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
+</svg>
+
+<script>
+"use strict";
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => [...el.querySelectorAll(s)];
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const icon = n => `<svg class="icon" aria-hidden="true"><use href="#i-${n}"/></svg>`;
+const enc = encodeURIComponent;
+const state = { me: null, info: null };
+
+function size(n) {
+  if (n == null) return "";
+  const u = ["B", "KB", "MB", "GB", "TB", "PB"];
+  let i = 0; let v = n;
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++; }
+  return (i === 0 ? v : v.toFixed(v < 10 ? 1 : 0)).toLocaleString("pt-BR") + " " + u[i];
+}
+const when = d => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
+
+async function api(method, path, body, opts = {}) {
+  const init = { method, headers: { "x-boxspace-csrf": "1" }, credentials: "same-origin" };
+  if (body !== undefined && !(body instanceof Blob)) { init.headers["content-type"] = "application/json"; init.body = JSON.stringify(body); }
+  else if (body) init.body = body;
+  const r = await fetch(path, init);
+  if (r.status === 401 && !opts.allow401) { state.me = null; render(); throw new Error("Sessão expirada. Entre novamente."); }
+  const data = r.headers.get("content-type")?.includes("json") ? await r.json() : null;
+  if (!r.ok) throw Object.assign(new Error(data?.error || `Erro ${r.status}`), { status: r.status });
+  return data;
+}
+
+let toastTimer;
+function toast(msg, bad = false) {
+  $(".toast")?.remove();
+  const t = document.createElement("div");
+  t.className = "toast" + (bad ? " bad" : "");
+  t.setAttribute("role", bad ? "alert" : "status");
+  t.textContent = msg;
+  document.body.append(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), bad ? 6000 : 3000);
+}
+const fail = e => toast(e.message || String(e), true);
+
+/* ---------- dialogs ---------- */
+function dialog(html, onSubmit) {
+  const d = $("#dlg"), f = $("#dlg-form");
+  f.innerHTML = html;
+  d.showModal();
+  $("input, textarea, select, button.primary", f)?.focus();
+  return new Promise(resolve => {
+    f.onsubmit = async ev => {
+      const btn = ev.submitter;
+      if (!btn || btn.value === "cancel") { ev.preventDefault(); d.close(); resolve(null); return; }
+      ev.preventDefault();
+      try {
+        btn.disabled = true;
+        const res = onSubmit ? await onSubmit(new FormData(f)) : true;
+        if (res !== false) { d.close(); resolve(res); }
+      } catch (e) { const er = $(".err", f); if (er) er.textContent = e.message; else fail(e); }
+      finally { btn.disabled = false; }
+    };
+    d.onclose = () => resolve(null);
+  });
+}
+const foot = (ok, danger) => `<p class="err"></p><div class="foot"><button class="btn" value="cancel">Cancelar</button><button class="btn ${danger ? "danger solid" : "primary"}" value="ok">${esc(ok)}</button></div>`;
+function confirmDlg(title, text, ok, danger = true) {
+  return dialog(`<h2>${esc(title)}</h2><p class="muted">${text}</p>${foot(ok, danger)}`);
+}
+
+/* ---------- login ---------- */
+function loginView() {
+  $("#app").innerHTML = `
+  <div class="login"><form id="login" autocomplete="on">
+    <div class="brand"><svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="19" rx="2" fill="#1E4D6B"/><rect x="3" y="7" width="26" height="5" fill="#F2C230"/></svg><h1>BoxSpace</h1></div>
+    <div class="field"><label for="ak">Access key</label><input id="ak" name="ak" autocomplete="username" required autofocus></div>
+    <div class="field"><label for="sk">Secret key</label><input id="sk" name="sk" type="password" autocomplete="current-password" required></div>
+    <p class="err" id="login-err"></p>
+    <button class="btn primary" style="width:100%;justify-content:center">Entrar</button>
+  </form></div>`;
+  $("#login").onsubmit = async ev => {
+    ev.preventDefault();
+    const f = new FormData(ev.target);
+    const b = $("button", ev.target); b.disabled = true;
+    try {
+      state.me = await api("POST", "/api/login", { accessKey: f.get("ak"), secretKey: f.get("sk") }, { allow401: true });
+      if (!location.hash) location.hash = "#/buckets";
+      render();
+    } catch (e) { $("#login-err").textContent = e.message; }
+    finally { b.disabled = false; }
+  };
+}
+
+/* ---------- shell ---------- */
+function shell(active, inner) {
+  const nav = [["buckets", "Buckets", "box"], ...(state.me.root ? [["keys", "Chaves de acesso", "key"]] : []), ["about", "Servidor", "info"]];
+  return `<div class="shell">
+    <aside class="rail">
+      <div class="brand"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="19" rx="2" fill="#fff"/><rect x="3" y="7" width="26" height="5" fill="#F2C230"/></svg><span>BoxSpace</span></div>
+      <nav>${nav.map(([id, label, ic]) => `<a href="#/${id}" ${active === id ? 'aria-current="page"' : ""}>${icon(ic)}${label}</a>`).join("")}</nav>
+      <div class="who">${state.me.readOnly ? '<span class="tag warn">Somente leitura</span>' : ""}<strong>${esc(state.me.accessKey)}</strong><button class="btn" id="logout">Sair</button></div>
+    </aside>
+    <main id="main">${inner}</main>
+  </div>
+  <aside class="drawer" id="drawer" aria-hidden="true"></aside>`;
+}
+
+/* ---------- router ---------- */
+function parseHash() {
+  const h = location.hash.slice(2);
+  const [path, qs] = h.split("?");
+  const parts = path.split("/").map(decodeURIComponent);
+  return { parts, q: new URLSearchParams(qs || "") };
+}
+
+async function render() {
+  if (!state.me) {
+    try { state.me = await api("GET", "/api/session", undefined, { allow401: true }); }
+    catch { return loginView(); }
+  }
+  const { parts, q } = parseHash();
+  const [view, bucket, sub] = parts;
+  try {
+    if (view === "b" && bucket) return sub === "settings" ? await settingsView(bucket) : await browserView(bucket, q.get("prefix") || "");
+    if (view === "keys" && state.me.root) return await keysView();
+    if (view === "about") return await aboutView();
+    return await bucketsView();
+  } catch (e) { fail(e); }
+}
+window.addEventListener("hashchange", render);
+document.addEventListener("click", async ev => {
+  if (ev.target.closest("#logout")) { await api("POST", "/api/logout").catch(() => {}); state.me = null; location.hash = ""; render(); }
+});
+document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeDrawer(); });
+
+/* ---------- buckets ---------- */
+async function bucketsView() {
+  const [buckets, info] = await Promise.all([api("GET", "/api/buckets"), api("GET", "/api/info")]);
+  state.info = info;
+  const ro = state.me.readOnly;
+  const rows = buckets.map(b => `<tr>
+      <td class="name"><a href="#/b/${enc(b.name)}">${icon("box")}${esc(b.name)}</a></td>
+      <td class="r num">${b.objects.toLocaleString("pt-BR")}</td>
+      <td class="r num">${size(b.bytes)}</td>
+      <td class="hide-sm">${b.public ? '<span class="tag warn">Público</span>' : ""}${b.versioning === "Enabled" ? '<span class="tag">Versionado</span>' : ""}${b.encryption ? '<span class="tag">Criptografado</span>' : ""}</td>
+      <td class="hide-sm muted num">${when(b.created)}</td>
+      <td><div class="row-actions"><a class="btn link" href="#/b/${enc(b.name)}/settings">Configurar</a>${ro ? "" : `<button class="btn link danger" data-del="${esc(b.name)}" data-count="${b.objects}">Excluir</button>`}</div></td>
+    </tr>`).join("");
+  $("#app").innerHTML = shell("buckets", `
+    ${info.defaultCredentials ? '<div class="banner">O servidor está usando as credenciais padrão. Defina <code>BOXSPACE_ROOT_USER</code> e <code>BOXSPACE_ROOT_PASSWORD</code> antes de expor o BoxSpace na rede.</div>' : ""}
+    <div class="head"><h1>Buckets</h1><div class="actions">${ro ? "" : '<button class="btn primary" id="new-bucket">Criar bucket</button>'}</div></div>
+    <div class="panel">${buckets.length ? `<table><thead><tr><th>Nome</th><th class="r">Objetos</th><th class="r">Tamanho</th><th class="hide-sm">Recursos</th><th class="hide-sm">Criado em</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
+      : `<div class="empty"><h3>Nenhum bucket ainda</h3><p>Um bucket guarda seus arquivos. Crie o primeiro para começar a enviar dados.</p>${ro ? "" : '<button class="btn primary" id="new-bucket-2">Criar bucket</button>'}</div>`}</div>`);
+  const create = () => dialog(`<h2>Criar bucket</h2>
+      <div class="field"><label for="bn">Nome</label><input id="bn" name="name" required pattern="[a-z0-9][a-z0-9.\\-]{1,61}[a-z0-9]" placeholder="meus-arquivos"></div>
+      <p class="muted small">De 3 a 63 caracteres: letras minúsculas, números, pontos e hífens.</p>${foot("Criar bucket")}`,
+    async f => { await api("POST", "/api/buckets", { name: f.get("name") }); toast("Bucket criado."); location.hash = `#/b/${enc(f.get("name"))}`; });
+  $("#new-bucket")?.addEventListener("click", create);
+  $("#new-bucket-2")?.addEventListener("click", create);
+  $$("[data-del]").forEach(b => b.onclick = async () => {
+    const name = b.dataset.del, n = +b.dataset.count;
+    const ok = await confirmDlg("Excluir bucket", n
+      ? `<b>${esc(name)}</b> tem ${n.toLocaleString("pt-BR")} objeto(s). Todos eles, inclusive versões antigas, serão apagados permanentemente.`
+      : `O bucket <b>${esc(name)}</b> será excluído.`, "Excluir bucket");
+    if (!ok) return;
+    try { await api("DELETE", `/api/buckets/${enc(name)}?force=true`); toast("Bucket excluído."); render(); } catch (e) { fail(e); }
+  });
+}
+
+/* ---------- browser ---------- */
+function pathHtml(bucket, prefix) {
+  const segs = prefix.split("/").filter(Boolean);
+  let acc = "";
+  const crumbs = segs.map((s, i) => {
+    acc += s + "/";
+    return i === segs.length - 1 ? `<span class="sep">/</span><span class="here">${esc(s)}</span>` : `<span class="sep">/</span><a href="#/b/${enc(bucket)}?prefix=${enc(acc)}">${esc(s)}</a>`;
+  }).join("");
+  return `<div class="path"><a href="#/buckets">Buckets</a><span class="sep">/</span>${segs.length ? `<a href="#/b/${enc(bucket)}">${esc(bucket)}</a>` : `<span class="here">${esc(bucket)}</span>`}${crumbs}</div>`;
+}
+
+function bucketTabs(bucket, active) {
+  return `<nav class="tabs"><a href="#/b/${enc(bucket)}" ${active === "files" ? 'aria-current="page"' : ""}>Arquivos</a><a href="#/b/${enc(bucket)}/settings" ${active === "settings" ? 'aria-current="page"' : ""}>Configurações</a></nav>`;
+}
+
+async function browserView(bucket, prefix, token = "", append = false) {
+  const data = await api("GET", `/api/buckets/${enc(bucket)}/objects?prefix=${enc(prefix)}&token=${enc(token)}`);
+  const ro = state.me.readOnly;
+  const rowsHtml = [
+    ...data.prefixes.map(p => `<tr>
+      <td class="name"><a href="#/b/${enc(bucket)}?prefix=${enc(p)}">${icon("folder")}${esc(p.slice(prefix.length))}</a></td>
+      <td class="r muted">Pasta</td><td class="hide-sm"></td>
+      <td><div class="row-actions">${ro ? "" : `<button class="btn link danger" data-delprefix="${esc(p)}">Excluir</button>`}</div></td></tr>`),
+    ...data.objects.filter(o => o.key !== prefix).map(o => `<tr>
+      <td class="name"><a href="#" data-info="${esc(o.key)}">${icon("file")}${esc(o.key.slice(prefix.length))}</a>${o.encrypted ? ` <span title="Criptografado" class="muted">${icon("lock")}</span>` : ""}</td>
+      <td class="r num">${size(o.size)}</td>
+      <td class="hide-sm muted num">${when(o.lastModified)}</td>
+      <td><div class="row-actions"><a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(o.key)}">Baixar</a><button class="btn link" data-share="${esc(o.key)}">Compartilhar</button>${ro ? "" : `<button class="btn link danger" data-delkey="${esc(o.key)}">Excluir</button>`}</div></td></tr>`),
+  ].join("");
+  const more = data.nextToken ? `<div class="more"><button class="btn" id="more">Carregar mais</button></div>` : "";
+
+  if (append) {
+    $("#rows").insertAdjacentHTML("beforeend", rowsHtml);
+    $(".more")?.remove();
+    $(".panel").insertAdjacentHTML("beforeend", more);
+  } else {
+    const empty = !rowsHtml;
+    $("#app").innerHTML = shell("buckets", `
+      <div class="head">${pathHtml(bucket, prefix)}<div class="actions">${ro ? "" : `<button class="btn" id="new-folder">Nova pasta</button><label class="btn primary" for="file-input">Enviar arquivos</label><input type="file" id="file-input" multiple hidden>`}</div></div>
+      ${bucketTabs(bucket, "files")}
+      <div id="drop" style="margin-top:16px"><div class="panel">${empty
+        ? `<div class="empty"><h3>${prefix ? "Esta pasta está vazia" : "Este bucket está vazio"}</h3><p>${ro ? "Não há arquivos aqui." : "Arraste arquivos para cá ou use <b>Enviar arquivos</b>."}</p></div>`
+        : `<table><thead><tr><th>Nome</th><th class="r">Tamanho</th><th class="hide-sm">Modificado em</th><th></th></tr></thead><tbody id="rows">${rowsHtml}</tbody></table>`}${more}</div></div>`);
+    if (!ro) wireUploads(bucket, prefix);
+  }
+  $("#more")?.addEventListener("click", () => browserView(bucket, prefix, data.nextToken, true).catch(fail));
+  $$("[data-info]").forEach(a => a.onclick = ev => { ev.preventDefault(); objectDrawer(bucket, a.dataset.info).catch(fail); });
+  $$("[data-share]").forEach(b => b.onclick = () => shareDialog(bucket, b.dataset.share));
+  $$("[data-delkey]").forEach(b => b.onclick = async () => {
+    const k = b.dataset.delkey;
+    if (!await confirmDlg("Excluir arquivo", `<b>${esc(k)}</b> será excluído.`, "Excluir")) return;
+    try { await api("DELETE", `/api/buckets/${enc(bucket)}/object?key=${enc(k)}`); toast("Arquivo excluído."); render(); } catch (e) { fail(e); }
+  });
+  $$("[data-delprefix]").forEach(b => b.onclick = async () => {
+    const p = b.dataset.delprefix;
+    if (!await confirmDlg("Excluir pasta", `Todos os arquivos em <b>${esc(p)}</b> serão excluídos.`, "Excluir pasta")) return;
+    try { const r = await api("DELETE", `/api/buckets/${enc(bucket)}/prefix?prefix=${enc(p)}`); toast(`${r.deleted} arquivo(s) excluído(s).`); render(); } catch (e) { fail(e); }
+  });
+}
+
+function wireUploads(bucket, prefix) {
+  $("#file-input").onchange = ev => { upload(bucket, prefix, [...ev.target.files]); ev.target.value = ""; };
+  $("#new-folder").onclick = () => dialog(`<h2>Nova pasta</h2><div class="field"><label for="fn">Nome da pasta</label><input id="fn" name="name" required></div>${foot("Criar pasta", false)}`,
+    async f => {
+      const name = f.get("name").replace(/^\/+|\/+$/g, "");
+      if (!name) throw new Error("Informe um nome.");
+      await api("PUT", `/api/buckets/${enc(bucket)}/object?key=${enc(prefix + name + "/")}`, new Blob([]));
+      location.hash = `#/b/${enc(bucket)}?prefix=${enc(prefix + name + "/")}`;
+    });
+  const drop = $("#drop");
+  drop.ondragover = ev => { ev.preventDefault(); drop.classList.add("dropping"); };
+  drop.ondragleave = () => drop.classList.remove("dropping");
+  drop.ondrop = async ev => {
+    ev.preventDefault(); drop.classList.remove("dropping");
+    const files = [];
+    const walk = async (entry, path) => {
+      if (entry.isFile) await new Promise(r => entry.file(f => { files.push([path + f.name, f]); r(); }, r));
+      else if (entry.isDirectory) {
+        const reader = entry.createReader();
+        let batch;
+        do { batch = await new Promise(r => reader.readEntries(r, () => r([]))); for (const e of batch) await walk(e, path + entry.name + "/"); } while (batch.length);
+      }
+    };
+    const items = [...(ev.dataTransfer.items || [])].map(i => i.webkitGetAsEntry?.()).filter(Boolean);
+    if (items.length) { for (const e of items) await walk(e, ""); upload(bucket, prefix, files); }
+    else upload(bucket, prefix, [...ev.dataTransfer.files]);
+  };
+}
+
+function upload(bucket, prefix, files) {
+  if (!files.length) return;
+  let box = $(".uploads");
+  if (!box) {
+    box = document.createElement("section");
+    box.className = "uploads";
+    box.setAttribute("aria-live", "polite");
+    box.innerHTML = `<header><span>Envios</span><button class="btn link" id="close-up">Fechar</button></header><ul></ul>`;
+    document.body.append(box);
+    $("#close-up", box).onclick = () => box.remove();
+  }
+  const list = $("ul", box);
+  let pending = files.length;
+  const queue = files.map(f => Array.isArray(f) ? f : [f.name, f]);
+  const next = () => {
+    const item = queue.shift();
+    if (!item) return;
+    const [name, file] = item;
+    const li = document.createElement("li");
+    li.innerHTML = `<div>${esc(name)} <span class="muted num">${size(file.size)}</span></div><div class="bar"><i></i></div>`;
+    list.prepend(li);
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", `/api/buckets/${enc(bucket)}/object?key=${enc(prefix + name)}`);
+    xhr.setRequestHeader("x-boxspace-csrf", "1");
+    if (file.type) xhr.setRequestHeader("content-type", file.type);
+    xhr.upload.onprogress = e => { if (e.lengthComputable) $("i", li).style.width = (e.loaded / e.total * 100) + "%"; };
+    xhr.onloadend = () => {
+      const ok = xhr.status >= 200 && xhr.status < 300;
+      li.classList.add(ok ? "done" : "failed");
+      $("i", li).style.width = "100%";
+      if (!ok) { let m = "falhou"; try { m = JSON.parse(xhr.responseText).error; } catch {} li.insertAdjacentHTML("beforeend", `<div class="err">${esc(m)}</div>`); }
+      if (--pending === 0) { toast(`Envio concluído.`); const h = parseHash(); if (h.parts[0] === "b" && h.parts[1] === bucket) render(); }
+      next();
+    };
+    xhr.send(file);
+  };
+  for (let i = 0; i < Math.min(3, queue.length); i++) next();
+}
+
+function shareDialog(bucket, key) {
+  dialog(`<h2>Compartilhar arquivo</h2>
+    <p class="muted">Gera um link de download que funciona sem login até expirar.</p>
+    <div class="field"><label for="exp">Validade</label><select id="exp" name="exp">
+      <option value="3600">1 hora</option><option value="86400" selected>1 dia</option><option value="604800">7 dias</option></select></div>
+    <div id="share-out"></div>${foot("Gerar link", false)}`,
+    async f => {
+      const r = await api("POST", `/api/buckets/${enc(bucket)}/share`, { key, expires: +f.get("exp") });
+      $("#share-out").innerHTML = `<div class="field"><label>Link (expira em ${when(r.expiresAt)})</label><div class="secret"><span>${esc(r.url)}</span><button type="button" class="btn link" id="copy-url">Copiar</button></div></div>`;
+      $("#copy-url").onclick = () => navigator.clipboard.writeText(r.url).then(() => toast("Link copiado."), () => toast("Não foi possível copiar. Selecione o link manualmente.", true));
+      return false;
+    });
+}
+
+/* ---------- object drawer ---------- */
+function closeDrawer() { const d = $("#drawer"); if (d) { d.classList.remove("open"); d.setAttribute("aria-hidden", "true"); } }
+
+async function objectDrawer(bucket, key) {
+  const o = await api("GET", `/api/buckets/${enc(bucket)}/object?key=${enc(key)}`);
+  const ro = state.me.readOnly;
+  const kv = (rows) => `<dl class="kv">${rows.filter(r => r[1] !== "" && r[1] != null).map(([k, v]) => `<dt>${esc(k)}</dt><dd>${v}</dd>`).join("")}</dl>`;
+  const meta = Object.entries(o.meta || {});
+  const versioned = o.versions.length > 1 || o.versionId !== "null";
+  const d = $("#drawer");
+  d.innerHTML = `<header><h2>${esc(key.split("/").pop() || key)}</h2><button class="btn link" id="close-drawer">Fechar</button></header>
+    <div class="body">
+      ${kv([["Caminho", esc(key)], ["Tamanho", `<span class="num">${size(o.size)} (${o.size.toLocaleString("pt-BR")} bytes)</span>`], ["Tipo", esc(o.contentType)],
+            ["Modificado em", when(o.lastModified)], ["ETag", `<code>${esc(o.etag)}</code>`], ["Criptografia", o.encrypted ? "AES-256 (SSE-S3)" : "Nenhuma"]])}
+      ${meta.length ? `<h3>Metadados</h3>${kv(meta.map(([k, v]) => [k, esc(v)]))}` : ""}
+      ${o.tags.length ? `<h3>Tags</h3><p>${o.tags.map(([k, v]) => `<span class="tag">${esc(k)}=${esc(v)}</span>`).join(" ")}</p>` : ""}
+      <p style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}">Baixar</a><button class="btn" id="drawer-share">Compartilhar</button></p>
+      ${versioned ? `<h3 style="margin-top:22px">Versões</h3><ul class="versions">${o.versions.map(v => `<li>
+          <span><span class="num">${when(v.lastModified)}</span> ${v.isLatest ? '<span class="tag">Atual</span>' : ""}${v.deleteMarker ? '<span class="tag warn">Marcador de exclusão</span>' : ` <span class="muted num">${size(v.size)}</span>`}</span>
+          <span class="row-actions">${v.deleteMarker ? "" : `<a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}&versionId=${enc(v.versionId)}">Baixar</a>`}${ro ? "" : `<button class="btn link danger" data-delver="${esc(v.versionId)}">Apagar</button>`}</span></li>`).join("")}</ul>` : ""}
+    </div>`;
+  d.classList.add("open");
+  d.setAttribute("aria-hidden", "false");
+  $("#close-drawer").focus();
+  $("#close-drawer").onclick = closeDrawer;
+  $("#drawer-share").onclick = () => shareDialog(bucket, key);
+  $$("[data-delver]", d).forEach(b => b.onclick = async () => {
+    if (!await confirmDlg("Apagar versão", "Esta versão será apagada permanentemente.", "Apagar versão")) return;
+    try {
+      await api("DELETE", `/api/buckets/${enc(bucket)}/object?key=${enc(key)}&versionId=${enc(b.dataset.delver)}`);
+      toast("Versão apagada.");
+      objectDrawer(bucket, key).catch(() => { closeDrawer(); render(); });
+    } catch (e) { fail(e); }
+  });
+}
+
+/* ---------- bucket settings ---------- */
+async function settingsView(bucket) {
+  const b = await api("GET", `/api/buckets/${enc(bucket)}`);
+  const ro = state.me.readOnly;
+  const dis = ro ? "disabled" : "";
+  const mode = b.policyMode;
+  const ruleRow = (r = {}) => `<div class="rule">
+      <div class="field"><label>Prefixo (vazio = todo o bucket)</label><input name="prefix" value="${esc(r.prefix || "")}" placeholder="logs/" ${dis}></div>
+      <div class="field"><label>Apagar após (dias)</label><input name="expirationDays" type="number" min="1" value="${r.expirationDays ?? ""}" ${dis}></div>
+      <div class="field"><label>Versões antigas (dias)</label><input name="noncurrentDays" type="number" min="1" value="${r.noncurrentDays ?? ""}" ${dis}></div>
+      <div class="field"><label>Envios incompletos (dias)</label><input name="abortDays" type="number" min="1" value="${r.abortDays ?? ""}" ${dis}></div>
+      <label class="switch" title="Regra ativa"><input type="checkbox" name="enabled" ${r.enabled !== false ? "checked" : ""} ${dis}><span class="small">Ativa</span></label>
+      ${ro ? "" : '<button class="btn link danger" type="button" data-remove>Remover</button>'}</div>`;
+  const evOpts = [["s3:ObjectCreated:*", "Criação"], ["s3:ObjectRemoved:*", "Exclusão"], ["*", "Todos"]];
+  const hookRow = (h = {}) => {
+    const ev = h.events?.length === 1 ? h.events[0] : (h.events?.length ? "*" : "*");
+    return `<div class="hook">
+      <div class="field"><label>URL</label><input name="url" type="url" value="${esc(h.url || "")}" placeholder="https://exemplo.com/webhook" required ${dis}></div>
+      <div class="field"><label>Eventos</label><select name="events" ${dis}>${evOpts.map(([v, l]) => `<option value="${v}" ${v === ev ? "selected" : ""}>${l}</option>`).join("")}</select></div>
+      <div class="field"><label>Prefixo</label><input name="prefix" value="${esc(h.prefix || "")}" ${dis}></div>
+      <div class="field"><label>Token</label><input name="token" value="${esc(h.token || "")}" placeholder="opcional" ${dis}></div>
+      ${ro ? "" : '<button class="btn link danger" type="button" data-remove>Remover</button>'}</div>`;
+  };
+
+  $("#app").innerHTML = shell("buckets", `
+    <div class="head">${pathHtml(bucket, "")}</div>
+    ${bucketTabs(bucket, "settings")}
+    <section class="section"><h2>Versionamento</h2>
+      <p>Guarda as versões anteriores de cada arquivo quando ele é substituído ou excluído, para que você possa recuperá-las.</p>
+      <label class="switch"><input type="checkbox" id="versioning" ${b.versioning === "Enabled" ? "checked" : ""} ${dis}><span>${b.versioning === "Enabled" ? "Ativado" : b.versioning === "Suspended" ? "Suspenso (as versões existentes continuam guardadas)" : "Desativado"}</span></label>
+    </section>
+    <section class="section"><h2>Criptografia</h2>
+      <p>Novos arquivos são cifrados no disco com AES-256. Os arquivos já existentes não mudam.</p>
+      <label class="switch"><input type="checkbox" id="encryption" ${b.encryption ? "checked" : ""} ${dis}><span>${b.encryption ? "Ativada para novos arquivos" : "Desativada"}</span></label>
+    </section>
+    <section class="section"><h2>Acesso público</h2>
+      <p>Define quem pode ler os arquivos sem uma chave de acesso.</p>
+      <div class="radios" role="radiogroup">
+        <label><input type="radio" name="mode" value="private" ${mode === "private" ? "checked" : ""} ${dis}><span><b>Privado</b><br><span class="muted small">Só quem tem uma chave de acesso.</span></span></label>
+        <label><input type="radio" name="mode" value="public-read" ${mode === "public-read" ? "checked" : ""} ${dis}><span><b>Leitura pública</b><br><span class="muted small">Qualquer pessoa com o endereço pode baixar e listar os arquivos.</span></span></label>
+        <label><input type="radio" name="mode" value="custom" ${mode === "custom" ? "checked" : ""} ${dis}><span><b>Política personalizada</b><br><span class="muted small">Uma política no formato JSON da AWS.</span></span></label>
+      </div>
+      <div class="field" id="policy-box" ${mode === "custom" ? "" : "hidden"}><label for="policy">Política</label><textarea id="policy" spellcheck="false" ${dis}>${esc(b.policy ? JSON.stringify(JSON.parse(b.policy), null, 2) : "")}</textarea></div>
+      ${ro ? "" : '<button class="btn primary" id="save-policy">Salvar acesso</button>'}
+    </section>
+    <section class="section"><h2>Limpeza automática</h2>
+      <p>Apaga arquivos depois de um número de dias. A verificação roda a cada hora.</p>
+      <div class="grid-rows" id="rules">${b.lifecycle.map(ruleRow).join("")}</div>
+      ${ro ? "" : '<button class="btn" id="add-rule">Adicionar regra</button> <button class="btn primary" id="save-rules">Salvar regras</button>'}
+    </section>
+    <section class="section"><h2>Notificações</h2>
+      <p>Envia um POST em JSON para uma URL sempre que arquivos são criados ou excluídos.</p>
+      <div class="grid-rows" id="hooks">${b.webhooks.map(hookRow).join("")}</div>
+      ${ro ? "" : '<button class="btn" id="add-hook">Adicionar destino</button> <button class="btn primary" id="save-hooks">Salvar notificações</button>'}
+    </section>`);
+  if (ro) return;
+  const bp = `/api/buckets/${enc(bucket)}`;
+  $("#versioning").onchange = async ev => { try { await api("PUT", `${bp}/versioning`, { enabled: ev.target.checked }); toast(ev.target.checked ? "Versionamento ativado." : "Versionamento suspenso."); render(); } catch (e) { fail(e); } };
+  $("#encryption").onchange = async ev => { try { await api("PUT", `${bp}/encryption`, { enabled: ev.target.checked }); toast(ev.target.checked ? "Criptografia ativada." : "Criptografia desativada."); render(); } catch (e) { fail(e); } };
+  $$('[name="mode"]').forEach(r => r.onchange = () => {
+    $("#policy-box").hidden = r.value !== "custom" || !r.checked;
+    if (r.value === "custom" && !$("#policy").value) $("#policy").value = JSON.stringify({ Version: "2012-10-17", Statement: [{ Effect: "Allow", Principal: "*", Action: ["s3:GetObject"], Resource: [`arn:aws:s3:::${bucket}/publico/*`] }] }, null, 2);
+  });
+  $("#save-policy").onclick = async () => {
+    const m = $('[name="mode"]:checked').value;
+    if (m === "public-read" && !await confirmDlg("Tornar público", `Qualquer pessoa poderá baixar e listar os arquivos de <b>${esc(bucket)}</b>.`, "Tornar público")) return;
+    try { await api("PUT", `${bp}/policy`, { mode: m, policy: $("#policy").value }); toast("Acesso salvo."); render(); } catch (e) { fail(e); }
+  };
+  const wireRemove = root => $$("[data-remove]", root).forEach(b => b.onclick = () => b.parentElement.remove());
+  wireRemove(document);
+  $("#add-rule").onclick = () => { $("#rules").insertAdjacentHTML("beforeend", ruleRow()); wireRemove($("#rules")); };
+  $("#add-hook").onclick = () => { $("#hooks").insertAdjacentHTML("beforeend", hookRow()); wireRemove($("#hooks")); };
+  const num = el => el.value ? +el.value : null;
+  $("#save-rules").onclick = async () => {
+    const rules = $$("#rules .rule").map(r => ({ prefix: $('[name="prefix"]', r).value, enabled: $('[name="enabled"]', r).checked,
+      expirationDays: num($('[name="expirationDays"]', r)), noncurrentDays: num($('[name="noncurrentDays"]', r)), abortDays: num($('[name="abortDays"]', r)) }));
+    try { await api("PUT", `${bp}/lifecycle`, { rules }); toast("Regras salvas."); render(); } catch (e) { fail(e); }
+  };
+  $("#save-hooks").onclick = async () => {
+    const webhooks = $$("#hooks .hook").map(h => {
+      const ev = $('[name="events"]', h).value;
+      return { url: $('[name="url"]', h).value.trim(), events: ev === "*" ? [] : [ev], prefix: $('[name="prefix"]', h).value, suffix: "", token: $('[name="token"]', h).value || null };
+    });
+    try { await api("PUT", `${bp}/webhooks`, { webhooks }); toast("Notificações salvas."); render(); } catch (e) { fail(e); }
+  };
+}
+
+/* ---------- keys ---------- */
+async function keysView() {
+  const keys = await api("GET", "/api/keys");
+  $("#app").innerHTML = shell("keys", `
+    <div class="head"><h1>Chaves de acesso</h1><div class="actions"><button class="btn primary" id="new-key">Criar chave</button></div></div>
+    <p class="muted" style="max-width:70ch">Use uma chave por aplicação, em vez das credenciais root. Uma chave somente leitura pode baixar e listar, mas não pode alterar nada.</p>
+    <div class="panel">${keys.length ? `<table><thead><tr><th>Access key</th><th>Descrição</th><th>Permissão</th><th class="hide-sm">Criada em</th><th></th></tr></thead><tbody>
+      ${keys.map(k => `<tr><td><code>${esc(k.accessKey)}</code></td><td>${esc(k.description)}</td><td>${k.readOnly ? '<span class="tag warn">Somente leitura</span>' : '<span class="tag">Leitura e escrita</span>'}</td><td class="hide-sm muted num">${when(k.created)}</td>
+        <td><div class="row-actions"><button class="btn link danger" data-revoke="${esc(k.accessKey)}">Revogar</button></div></td></tr>`).join("")}</tbody></table>`
+      : `<div class="empty"><h3>Nenhuma chave criada</h3><p>As aplicações estão usando as credenciais root. Crie uma chave para cada uma.</p></div>`}</div>`);
+  $("#new-key").onclick = async () => {
+    const r = await dialog(`<h2>Criar chave de acesso</h2>
+      <div class="field"><label for="desc">Descrição</label><input id="desc" name="description" placeholder="backup do servidor web"></div>
+      <div class="field"><label for="perm">Permissão</label><select id="perm" name="perm"><option value="rw">Leitura e escrita</option><option value="ro">Somente leitura</option></select></div>${foot("Criar chave", false)}`,
+      f => api("POST", "/api/keys", { description: f.get("description"), readOnly: f.get("perm") === "ro" }));
+    if (!r) return;
+    const shown = dialog(`<h2>Chave criada</h2><p class="muted">Copie a secret key agora. Ela não será mostrada de novo.</p>
+      <div class="field"><label>Access key</label><div class="secret"><span>${esc(r.accessKey)}</span></div></div>
+      <div class="field"><label>Secret key</label><div class="secret"><span>${esc(r.secretKey)}</span><button type="button" class="btn link" id="copy-sk">Copiar</button></div></div>
+      <div class="foot"><button class="btn primary" value="ok">Já copiei</button></div>`);
+    $("#copy-sk").onclick = () => navigator.clipboard.writeText(r.secretKey).then(() => toast("Secret key copiada."), () => toast("Não foi possível copiar. Selecione o texto manualmente.", true));
+    await shown;
+    render();
+  };
+  $$("[data-revoke]").forEach(b => b.onclick = async () => {
+    if (!await confirmDlg("Revogar chave", `As aplicações que usam <code>${esc(b.dataset.revoke)}</code> perderão o acesso imediatamente.`, "Revogar chave")) return;
+    try { await api("DELETE", `/api/keys/${enc(b.dataset.revoke)}`); toast("Chave revogada."); render(); } catch (e) { fail(e); }
+  });
+}
+
+/* ---------- server ---------- */
+async function aboutView() {
+  const i = await api("GET", "/api/info");
+  const ak = state.me.accessKey;
+  $("#app").innerHTML = shell("about", `
+    <div class="head"><h1>Servidor</h1></div>
+    <div class="stats"><div><b class="num">${i.buckets}</b><span class="muted">buckets</span></div><div><b class="num">${i.objects.toLocaleString("pt-BR")}</b><span class="muted">objetos</span></div><div><b class="num">${size(i.bytes)}</b><span class="muted">armazenados (todas as versões)</span></div>${state.me.root ? `<div><b class="num">${i.keys}</b><span class="muted">chaves de acesso</span></div>` : ""}</div>
+    <section class="section"><h2>Conectar uma aplicação</h2>
+      <p>O BoxSpace fala a API do S3. Use o endereço abaixo como endpoint em qualquer cliente S3.</p>
+      <dl class="kv"><dt>Endpoint</dt><dd><code>${esc(i.serverUrl)}</code></dd><dt>Região</dt><dd><code>${esc(i.region)}</code></dd><dt>Versão</dt><dd>BoxSpace ${esc(i.version)}</dd></dl>
+      <h3>Python (boto3)</h3>
+<pre>import boto3
+s3 = boto3.client("s3",
+    endpoint_url="${esc(i.serverUrl)}",
+    aws_access_key_id="${esc(ak)}",
+    aws_secret_access_key="SUA_SECRET_KEY",
+    region_name="${esc(i.region)}")
+s3.upload_file("foto.jpg", "meu-bucket", "fotos/foto.jpg")</pre>
+      <h3>AWS CLI</h3>
+<pre>aws configure set aws_access_key_id ${esc(ak)}
+aws configure set aws_secret_access_key SUA_SECRET_KEY
+aws --endpoint-url ${esc(i.serverUrl)} s3 ls</pre>
+      <h3>Node.js (AWS SDK v3)</h3>
+<pre>import { S3Client } from "@aws-sdk/client-s3";
+const s3 = new S3Client({
+  endpoint: "${esc(i.serverUrl)}", region: "${esc(i.region)}", forcePathStyle: true,
+  credentials: { accessKeyId: "${esc(ak)}", secretAccessKey: "SUA_SECRET_KEY" },
+});</pre>
+    </section>`);
+}
+
+render();
+</script>
+</body>
+</html>
