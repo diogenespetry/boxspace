@@ -30,6 +30,42 @@ s3 = boto3.client("s3", endpoint_url="http://localhost:9000",
 s3.upload_file("foto.jpg", "meu-bucket", "fotos/foto.jpg")
 ```
 
+### Com Docker
+
+```bash
+docker run -d --name boxspace \
+  -p 9000:9000 -p 9001:9001 \
+  -e BOXSPACE_ROOT_USER=admin \
+  -e BOXSPACE_ROOT_PASSWORD='uma-senha-forte' \
+  -e BOXSPACE_KMS_SECRET_KEY="$(openssl rand -base64 32)" \
+  -v boxspace-data:/data \
+  ghcr.io/diogenespetry/boxspace:latest
+```
+
+Guarde o valor de `BOXSPACE_KMS_SECRET_KEY` que você usou: os objetos criptografados só podem ser lidos com ele.
+
+Com Docker Compose:
+
+```yaml
+services:
+  boxspace:
+    image: ghcr.io/diogenespetry/boxspace:latest
+    ports: ["9000:9000", "9001:9001"]
+    environment:
+      BOXSPACE_ROOT_USER: admin
+      BOXSPACE_ROOT_PASSWORD: uma-senha-forte
+      BOXSPACE_KMS_SECRET_KEY: cole-aqui-a-chave-base64
+      BOXSPACE_SERVER_URL: https://s3.seudominio.com.br
+    volumes: ["boxspace-data:/data"]
+    restart: unless-stopped
+volumes:
+  boxspace-data:
+```
+
+A imagem roda como usuário sem privilégios, sobre a distroless da Google, e está disponível para amd64 e arm64. Ela é publicada automaticamente pelo GitHub Actions a cada push no `main` (tag `latest`) e a cada tag `v*` (por exemplo `v0.1.0` gera `0.1.0` e `0.1`).
+
+Para construir localmente: `docker build -t boxspace .`
+
 Para clientes que usam o estilo virtual-host por padrão (como o SDK JS v3), ative `forcePathStyle: true` ou defina `BOXSPACE_DOMAIN`.
 
 ## Configuração
