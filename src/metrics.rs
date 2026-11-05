@@ -133,6 +133,9 @@ impl Metrics {
         let _ = writeln!(o, "# TYPE boxspace_heal_healed gauge\nboxspace_heal_healed {}", h.healed);
         let _ = writeln!(o, "# HELP boxspace_heal_lost Objects that could not be reconstructed in the last check.\n# TYPE boxspace_heal_lost gauge\nboxspace_heal_lost {}", h.lost_count);
 
+        let _ = writeln!(o, "# HELP boxspace_ip_blocked_total Requests refused by the IP filter.\n# TYPE boxspace_ip_blocked_total counter\nboxspace_ip_blocked_total {}", app.ipfilter.blocked_total.load(std::sync::atomic::Ordering::Relaxed));
+        let _ = writeln!(o, "# HELP boxspace_ip_bans_total Automatic IP bans issued.\n# TYPE boxspace_ip_bans_total counter\nboxspace_ip_bans_total {}", app.ipfilter.bans_total.load(std::sync::atomic::Ordering::Relaxed));
+        let _ = writeln!(o, "# TYPE boxspace_ip_bans_active gauge\nboxspace_ip_bans_active {}", app.ipfilter.bans().len());
         let r = replication::stats(app, None);
         let _ = writeln!(o, "# TYPE boxspace_replication_pending gauge\nboxspace_replication_pending {}", r.pending);
         let _ = writeln!(o, "# TYPE boxspace_replication_failed gauge\nboxspace_replication_failed {}", r.failed);

@@ -217,6 +217,7 @@ dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1
   <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path stroke="currentColor" stroke-width="1.8" d="M12 11v6M12 7.5v.5"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
   <symbol id="i-list" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6zM9 12l2 2 4-4"/></symbol>
   <symbol id="i-disk" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 14h18M7 17h.01"/></symbol>
 </svg>
 
@@ -317,7 +318,7 @@ function loginView() {
 /* ---------- shell ---------- */
 function shell(active, inner) {
   const nav = [["buckets", "Buckets", "box"],
-    ...(state.me.root ? [["keys", "Chaves de acesso", "key"], ["audit", "Auditoria", "list"]] : []),
+    ...(state.me.root ? [["keys", "Chaves de acesso", "key"], ["ips", "Bloqueio de IPs", "shield"], ["audit", "Auditoria", "list"]] : []),
     ...(state.me.admin ? [["server", "Servidor", "disk"]] : [["about", "Conectar", "info"]])];
   return `<div class="shell">
     <aside class="rail">
@@ -350,6 +351,7 @@ async function render() {
     if (view === "b" && bucket) return sub === "settings" ? await settingsView(bucket) : await browserView(bucket, q.get("prefix") || "", q.get("q") || "");
     if (view === "keys" && state.me.root) return await keysView();
     if (view === "audit" && state.me.root) return await auditView(q);
+    if (view === "ips" && state.me.root) return await ipView();
     if (view === "server" && state.me.admin) return await serverView();
     if (view === "about") return await aboutView();
     return await bucketsView();
@@ -918,6 +920,94 @@ async function auditView(q) {
     if (f.get("errors")) p.set("errors", "1");
     location.hash = `#/audit${p.toString() ? "?" + p : ""}`;
   };
+}
+
+/* ---------- ip filter ---------- */
+const scopeLabel = { all: "API e console", api: "Só API", console: "Só console" };
+
+async function ipView() {
+  const r = await api("GET", "/api/ipfilter");
+  const cfg = r.config;
+  const save = async (next, msg) => {
+    try { await api("PUT", "/api/ipfilter", next); toast(msg); render(); return true; } catch (e) { fail(e); return false; }
+  };
+  const rules = cfg.rules.map((x, i) => `<tr>
+      <td><code>${esc(x.cidr)}</code></td>
+      <td>${x.action === "allow" ? '<span class="tag good">Permitir</span>' : '<span class="tag bad">Bloquear</span>'}</td>
+      <td>${esc(scopeLabel[x.scope] || x.scope)}</td>
+      <td class="hide-sm muted num">${x.expires ? `até ${when(x.expires)}` : "Permanente"}</td>
+      <td class="hide-sm">${esc(x.note)}</td>
+      <td><div class="row-actions"><button class="btn link danger" data-rm="${i}">Remover</button></div></td></tr>`).join("");
+  const bans = r.bans.map(b => `<tr>
+      <td><code>${esc(b.ip)}</code></td>
+      <td class="muted num">${whenFull(b.since)}</td>
+      <td class="muted num">${whenFull(b.until)}</td>
+      <td class="r num">${b.failures}</td>
+      <td><div class="row-actions"><button class="btn link" data-unban="${esc(b.ip)}">Desbloquear</button><button class="btn link danger" data-perm="${esc(b.ip)}">Bloquear de vez</button></div></td></tr>`).join("");
+  $("#app").innerHTML = shell("ips", `
+    <div class="head"><h1>Bloqueio de IPs</h1></div>
+    ${r.disabled ? '<div class="banner bad">O filtro está desligado por <code>BOXSPACE_IP_FILTER=off</code>. As regras abaixo estão salvas, mas não são aplicadas.</div>' : ""}
+    <p class="muted" style="max-width:72ch">Seu endereço é <code>${esc(r.yourIp)}</code>. O próprio servidor (localhost) nunca é bloqueado.${r.trustProxy ? "" : " Se o BoxSpace estiver atrás de um proxy reverso, defina <code>BOXSPACE_TRUST_PROXY=1</code> para que os clientes sejam identificados pelo IP real."}</p>
+    <section class="section"><h2>Modo</h2>
+      <div class="radios" role="radiogroup">
+        <label><input type="radio" name="ipmode" value="blocklist" ${cfg.mode === "blocklist" ? "checked" : ""}><span><b>Bloquear os IPs da lista</b><br><span class="muted small">Todos podem acessar, menos os endereços com regra de bloqueio.</span></span></label>
+        <label><input type="radio" name="ipmode" value="allowlist" ${cfg.mode === "allowlist" ? "checked" : ""}><span><b>Permitir só os IPs da lista</b><br><span class="muted small">Só os endereços com regra de permissão podem acessar. Crie antes uma regra para o seu endereço.</span></span></label>
+      </div>
+      <button class="btn primary" id="save-mode">Salvar modo</button>
+    </section>
+    <section class="section"><h2>Regras</h2>
+      <p>Endereços ou faixas no formato CIDR, como <code>203.0.113.7</code>, <code>10.0.0.0/8</code> ou <code>2001:db8::/32</code>. Uma regra de permissão vale mais que uma de bloqueio e livra o endereço do bloqueio automático.</p>
+      <div class="panel">${cfg.rules.length ? `<table><thead><tr><th>Endereço</th><th>Ação</th><th>Onde</th><th class="hide-sm">Validade</th><th class="hide-sm">Observação</th><th></th></tr></thead><tbody>${rules}</tbody></table>`
+        : '<div class="empty"><h3>Nenhuma regra</h3><p>Adicione uma regra para bloquear ou permitir um endereço.</p></div>'}</div>
+      <p><button class="btn" id="add-rule">Adicionar regra</button></p>
+    </section>
+    <section class="section"><h2>Bloqueio automático</h2>
+      <p>Bloqueia por um tempo os endereços que erram a autenticação várias vezes seguidas, tanto na API S3 quanto no login do console.</p>
+      <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="auto-on" ${cfg.auto.enabled ? "checked" : ""}><span>${cfg.auto.enabled ? "Ativado" : "Desativado"}</span></label>
+      <div class="row-box grant" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
+        <div class="field"><label for="auto-max">Tentativas erradas</label><input id="auto-max" type="number" min="1" value="${cfg.auto.maxFailures}"></div>
+        <div class="field"><label for="auto-win">Dentro de (minutos)</label><input id="auto-win" type="number" min="1" value="${Math.round(cfg.auto.windowSecs / 60)}"></div>
+        <div class="field"><label for="auto-ban">Bloquear por (minutos)</label><input id="auto-ban" type="number" min="1" value="${Math.round(cfg.auto.banSecs / 60)}"></div>
+      </div>
+      <button class="btn primary" id="save-auto">Salvar bloqueio automático</button>
+    </section>
+    <section class="section"><h2>Bloqueados agora</h2>
+      <p>Endereços bloqueados automaticamente. Esses bloqueios terminam sozinhos e também ao reiniciar o servidor. ${r.blockedTotal ? `${r.blockedTotal.toLocaleString("pt-BR")} requisição(ões) recusada(s) desde que o servidor iniciou.` : ""}</p>
+      <div class="panel">${r.bans.length ? `<table><thead><tr><th>Endereço</th><th>Desde</th><th>Até</th><th class="r">Falhas</th><th></th></tr></thead><tbody>${bans}</tbody></table>`
+        : '<div class="empty"><h3>Nenhum endereço bloqueado</h3><p>Quando alguém errar a autenticação muitas vezes, o endereço aparece aqui.</p></div>'}</div>
+    </section>`);
+  $("#save-mode").onclick = async () => {
+    const mode = $('[name="ipmode"]:checked').value;
+    if (mode === "allowlist" && !await confirmDlg("Permitir só a lista", "Qualquer endereço sem regra de permissão perderá o acesso imediatamente, inclusive aplicações que usam a API.", "Ativar lista de permissão")) return;
+    save({ ...cfg, mode }, "Modo salvo.");
+  };
+  $("#save-auto").onclick = () => save({ ...cfg, auto: { enabled: $("#auto-on").checked, maxFailures: +$("#auto-max").value,
+    windowSecs: +$("#auto-win").value * 60, banSecs: +$("#auto-ban").value * 60 } }, "Bloqueio automático salvo.");
+  $("#auto-on").onchange = ev => { ev.target.nextElementSibling.textContent = ev.target.checked ? "Ativado" : "Desativado"; };
+  $$("[data-rm]").forEach(b => b.onclick = () => save({ ...cfg, rules: cfg.rules.filter((_, i) => i !== +b.dataset.rm) }, "Regra removida."));
+  $$("[data-unban]").forEach(b => b.onclick = async () => {
+    try { await api("DELETE", `/api/ipfilter/bans/${enc(b.dataset.unban)}`); toast("Endereço desbloqueado."); render(); } catch (e) { fail(e); }
+  });
+  $$("[data-perm]").forEach(b => b.onclick = async () => {
+    const ip = b.dataset.perm;
+    if (await save({ ...cfg, rules: [...cfg.rules, { cidr: ip, action: "block", scope: "all", note: "bloqueado após falhas de autenticação" }] }, "Endereço bloqueado de vez.")) {
+      await api("DELETE", `/api/ipfilter/bans/${enc(ip)}`).catch(() => {});
+    }
+  });
+  $("#add-rule").onclick = () => dialog(`<h2>Adicionar regra</h2>
+      <div class="field"><label for="rc">Endereço ou faixa</label><input id="rc" name="cidr" required placeholder="203.0.113.0/24"></div>
+      <div class="field"><label for="ra">Ação</label><select id="ra" name="action"><option value="block">Bloquear</option><option value="allow">Permitir</option></select></div>
+      <div class="field"><label for="rs">Onde</label><select id="rs" name="scope"><option value="all">API e console</option><option value="api">Só API</option><option value="console">Só console</option></select></div>
+      <div class="field"><label for="rv">Validade</label><select id="rv" name="ttl"><option value="">Permanente</option><option value="3600">1 hora</option><option value="86400">1 dia</option><option value="604800">7 dias</option><option value="2592000">30 dias</option></select></div>
+      <div class="field"><label for="rn">Observação</label><input id="rn" name="note" placeholder="opcional"></div>
+      ${foot("Adicionar regra", false)}`,
+    async f => {
+      const ttl = f.get("ttl");
+      const rule = { cidr: f.get("cidr").trim(), action: f.get("action"), scope: f.get("scope"), note: f.get("note"),
+        expires: ttl ? new Date(Date.now() + ttl * 1000).toISOString() : null };
+      await api("PUT", "/api/ipfilter", { ...cfg, rules: [...cfg.rules, rule] });
+      toast("Regra adicionada."); render();
+    });
 }
 
 /* ---------- server ---------- */

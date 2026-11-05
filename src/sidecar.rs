@@ -63,9 +63,10 @@ pub async fn write_sys(app: &App) -> Result<()> {
     let buckets = serde_json::to_vec_pretty(&SysFile { updated: now, items: app.store.list_buckets()? })?;
     let keys_plain = serde_json::to_vec(&app.store.list_keys()?)?;
     let keys = serde_json::to_vec_pretty(&SysFile { updated: now, items: app.kms.seal_bytes(&keys_plain) })?;
+    let ip = serde_json::to_vec_pretty(&SysFile { updated: now, items: app.ipfilter.config() })?;
     for d in app.disks.online() {
         let dir = d.sys_dir();
-        for (name, data) in [("buckets.json", &buckets), ("keys.json", &keys)] {
+        for (name, data) in [("buckets.json", &buckets), ("keys.json", &keys), ("ipfilter.json", &ip)] {
             if let Err(e) = write_atomic(&dir, name, data).await {
                 d.report(&e);
             }
@@ -119,6 +120,9 @@ pub fn rebuild(app: &App) -> Result<(usize, usize)> {
             }
             Err(e) => tracing::error!("não foi possível restaurar as chaves de acesso: {e}"),
         }
+    }
+    if let Some(cfg) = newest::<crate::ipfilter::IpConfig>(app, "ipfilter.json") {
+        app.store.put_setting("ipfilter", &cfg)?;
     }
     let mut seen: HashSet<(String, String)> = HashSet::new();
     let mut versions = 0;

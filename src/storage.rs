@@ -36,6 +36,8 @@ const QUEUE: TableDefinition<u64, &[u8]> = TableDefinition::new("replication_que
 /// Small counters; "seq" is the highest version sequence ever issued, so a
 /// clock that goes backwards cannot make new versions sort as older.
 const META: TableDefinition<&str, u64> = TableDefinition::new("meta");
+/// Server-wide settings as JSON (e.g. "ipfilter").
+const SETTINGS: TableDefinition<&str, &[u8]> = TableDefinition::new("settings");
 
 pub const NULL_VERSION: &str = "null";
 
@@ -343,6 +345,7 @@ impl Store {
             tx.open_table(STATS).map_err(|e| e.to_string())?;
             tx.open_table(QUEUE).map_err(|e| e.to_string())?;
             tx.open_table(META).map_err(|e| e.to_string())?;
+            tx.open_table(SETTINGS).map_err(|e| e.to_string())?;
         }
         tx.commit().map_err(|e| e.to_string())?;
         let stored_seq = {
@@ -809,6 +812,23 @@ impl Store {
         tx.commit()?;
         self.sys_changed.notify_one();
         Ok(existed)
+    }
+
+    // ---------------- settings ----------------
+
+    pub fn get_setting<T: DeserializeOwned>(&self, name: &str) -> Result<Option<T>> {
+        let tx = self.db.begin_read()?;
+        let t = tx.open_table(SETTINGS)?;
+        let r = t.get(name)?;
+        r.map(|g| de(g.value())).transpose()
+    }
+
+    pub fn put_setting<T: Serialize>(&self, name: &str, v: &T) -> Result<()> {
+        let tx = self.db.begin_write()?;
+        tx.open_table(SETTINGS)?.insert(name, ser(v).as_slice())?;
+        tx.commit()?;
+        self.sys_changed.notify_one();
+        Ok(())
     }
 
     // ---------------- replication queue ----------------

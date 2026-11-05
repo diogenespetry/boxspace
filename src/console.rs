@@ -22,7 +22,7 @@ use serde_json::{json, Value};
 use tokio_stream_shim::ReceiverStream;
 
 use crate::{
-    api::{client_ip, valid_bucket_name},
+    api::{auth_failed, client_ip, ip_refused, valid_bucket_name},
     audit,
     auth::{self, Payload},
     blob,
@@ -30,6 +30,7 @@ use crate::{
     events::{self, Webhook},
     lifecycle::LifecycleRule,
     listing, ops, policy, replication,
+    ipfilter::{IpConfig, IpFilter, Surface},
     storage::{AccessKey, Grant, ObjectVersion, ReplTarget, Scan},
     util::{ct_eq, header, random_alnum, random_hex, set_header, uri_encode},
     view, zip, App,
@@ -187,7 +188,10 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/keys", get(keys_list).post(keys_create))
         .route("/api/keys/{ak}", put(keys_update).delete(keys_delete))
         .layer(DefaultBodyLimit::disable())
+        .route("/api/ipfilter", get(ipfilter_get).put(ipfilter_put))
+        .route("/api/ipfilter/bans/{ip}", delete(ipfilter_unban))
         .layer(middleware::from_fn_with_state(app.clone(), audit_layer))
+        .layer(middleware::from_fn_with_state(app.clone(), ip_layer))
         .layer(middleware::from_fn(security_headers))
         .with_state(app)
 }
@@ -210,6 +214,21 @@ async fn security_headers(req: Request, next: Next) -> Response {
     r
 }
 
+/// Refuse filtered source addresses before anything else.
+async fn ip_layer(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, req: Request, next: Next) -> Response {
+    let ip = client_ip(&app, req.headers(), peer);
+    if let Err(reason) = app.ipfilter.check(ip, Surface::Console) {
+        ip_refused(&app, ip, reason, "console", req.method().as_str(), req.uri().path());
+        let mut r = Html(format!(
+            "<!doctype html><meta charset=utf-8><title>Acesso bloqueado</title><p style=\"font:16px system-ui;margin:3em\">O acesso ao console a partir do endereço <b>{ip}</b> está bloqueado.</p>"
+        ))
+        .into_response();
+        *r.status_mut() = StatusCode::FORBIDDEN;
+        return r;
+    }
+    next.run(req).await
+}
+
 /// Record console API calls in the audit log.
 async fn audit_layer(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, req: Request, next: Next) -> Response {
     let path = req.uri().path().to_string();
@@ -219,7 +238,7 @@ async fn audit_layer(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo
     }
     let started = Instant::now();
     let method = req.method().clone();
-    let remote = client_ip(&app, req.headers(), peer);
+    let remote = client_ip(&app, req.headers(), peer).to_string();
     let key = session_key(&app, req.headers());
     let ua = header(req.headers(), "user-agent").map(str::to_string);
     let bucket = path.strip_prefix("/api/buckets/").and_then(|r| r.split('/').next()).map(crate::util::decode);
@@ -271,10 +290,13 @@ async fn login(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<Socke
         method: "POST".into(),
         status: if ok { 200 } else { 401 },
         access_key: Some(ak.chars().take(128).collect()),
-        remote: client_ip(&app, &headers, peer),
+        remote: client_ip(&app, &headers, peer).to_string(),
         user_agent: header(&headers, "user-agent").map(str::to_string),
         ..Default::default()
     });
+    if !ok {
+        auth_failed(&app, client_ip(&app, &headers, peer), "console");
+    }
     let Some((_, id)) = found.filter(|_| ok) else {
         tokio::time::sleep(Duration::from_millis(600)).await; // slow down guessing
         return Err(ApiError(StatusCode::UNAUTHORIZED, "Access key ou secret key incorretas.".into()));
@@ -1187,6 +1209,52 @@ async fn keys_delete(State(app): State<Arc<App>>, a: Auth, Path(ak): Path<String
     }
     app.sessions.lock().unwrap_or_else(|e| e.into_inner()).retain(|_, s| s.access_key != ak);
     Ok(Json(json!({ "ok": true })))
+}
+
+// ----------------------------------------------------------- ipfilter ----
+
+async fn ipfilter_get(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, a: Auth) -> R<Json<Value>> {
+    a.require_root()?;
+    Ok(Json(json!({
+        "config": app.ipfilter.config(),
+        "bans": app.ipfilter.bans(),
+        "yourIp": client_ip(&app, &headers, peer).to_string(),
+        "disabled": app.ipfilter.disabled(),
+        "trustProxy": app.cfg.trust_proxy,
+        "blockedTotal": app.ipfilter.blocked_total.load(std::sync::atomic::Ordering::Relaxed),
+    })))
+}
+
+async fn ipfilter_put(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, headers: HeaderMap, a: Auth, Json(mut cfg): Json<IpConfig>) -> R<Json<Value>> {
+    a.require_root()?;
+    let now = Utc::now();
+    for r in &mut cfg.rules {
+        r.cidr = r.cidr.trim().to_string();
+        r.note = r.note.chars().take(200).collect();
+        if r.scope.is_empty() {
+            r.scope = "all".into();
+        }
+        if r.created.is_none() {
+            r.created = Some(now);
+        }
+    }
+    // Drop rules that already expired.
+    cfg.rules.retain(|r| r.expires.is_none_or(|e| e > now));
+    let me = client_ip(&app, &headers, peer);
+    if !IpFilter::would_allow(&cfg, me, Surface::Console).map_err(bad)? {
+        return Err(bad(format!(
+            "Esta configuração bloquearia o seu próprio acesso ao console (IP {me}). Adicione uma regra que permita este endereço antes de salvar."
+        )));
+    }
+    app.ipfilter.set(cfg.clone()).map_err(bad)?;
+    app.store.put_setting("ipfilter", &cfg)?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn ipfilter_unban(State(app): State<Arc<App>>, a: Auth, Path(ip): Path<String>) -> R<Json<Value>> {
+    a.require_root()?;
+    let ip: std::net::IpAddr = ip.parse().map_err(|_| bad("endereço IP inválido"))?;
+    Ok(Json(json!({ "ok": app.ipfilter.unban(ip) })))
 }
 
 /// Tiny adapter: mpsc receiver as a Stream (avoids an extra dependency).

@@ -1,6 +1,12 @@
 //! S3 REST API: request routing and operation handlers.
 
-use std::{collections::BTreeMap, io, net::SocketAddr, sync::Arc, time::Instant};
+use std::{
+    collections::BTreeMap,
+    io,
+    net::{IpAddr, SocketAddr},
+    sync::Arc,
+    time::Instant,
+};
 
 use axum::{
     body::Body,
@@ -36,17 +42,61 @@ type Target = (Option<String>, Option<String>);
 
 // ---------------------------------------------------------------- entry ----
 
-/// Client address, honouring X-Forwarded-For when configured.
-pub fn client_ip(app: &App, headers: &HeaderMap, peer: SocketAddr) -> String {
+/// Client address, honouring X-Forwarded-For when configured
+/// (the left-most entry, i.e. the original client).
+pub fn client_ip(app: &App, headers: &HeaderMap, peer: SocketAddr) -> IpAddr {
     if app.cfg.trust_proxy
-        && let Some(f) = header(headers, "x-forwarded-for").and_then(|v| v.split(',').next())
+        && let Some(ip) = header(headers, "x-forwarded-for")
+            .and_then(|v| v.split(',').next())
+            .and_then(|f| f.trim().parse::<IpAddr>().ok())
     {
-        return f.trim().to_string();
+        return ip.to_canonical();
     }
-    peer.ip().to_string()
+    peer.ip().to_canonical()
+}
+
+/// Response for a refused source address (and a rate-limited audit entry).
+pub fn ip_refused(app: &App, ip: IpAddr, reason: &str, source: &str, method: &str, path: &str) {
+    if app.ipfilter.should_log(ip) {
+        tracing::info!("acesso recusado para {ip} ({reason}): {method} {path}");
+        app.audit.log(audit::Entry {
+            time: Utc::now(),
+            request_id: random_hex(8).to_uppercase(),
+            source: source.into(),
+            op: "IpBlocked".into(),
+            method: method.into(),
+            status: 403,
+            remote: ip.to_string(),
+            error: Some(reason.to_string()),
+            ..Default::default()
+        });
+    }
+}
+
+/// Count an authentication failure; log a ban if it triggered one.
+pub fn auth_failed(app: &App, ip: IpAddr, source: &str) {
+    if let Some(ban) = app.ipfilter.record_failure(ip) {
+        app.audit.log(audit::Entry {
+            time: Utc::now(),
+            request_id: random_hex(8).to_uppercase(),
+            source: source.into(),
+            op: "IpBanned".into(),
+            status: 403,
+            remote: ban.ip.clone(),
+            error: Some(format!("{} falhas de autenticação; bloqueado até {}", ban.failures, iso8601(&ban.until))),
+            ..Default::default()
+        });
+    }
 }
 
 pub async fn handle(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, req: Request) -> Response {
+    let ip = client_ip(&app, req.headers(), peer);
+    if let Err(reason) = app.ipfilter.check(ip, crate::ipfilter::Surface::Api) {
+        ip_refused(&app, ip, reason, "s3", req.method().as_str(), req.uri().path());
+        let rid = random_hex(8).to_uppercase();
+        app.metrics.record("Blocked", 403, 0.0, 0, 0);
+        return S3Error::new("AccessDenied", 403, "Access from your IP address is not allowed.").to_response(req.method() == Method::HEAD, &rid);
+    }
     if req.uri().path().starts_with("/_boxspace/") {
         return system(&app, req);
     }
@@ -58,7 +108,7 @@ pub async fn handle(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<
     let target = target(&app, &parts);
     let op = op_name(&parts, &target);
     let origin = header(&parts.headers, "origin").map(str::to_string);
-    let remote = client_ip(&app, &parts.headers, peer);
+    let remote = ip.to_string();
     let user_agent = header(&parts.headers, "user-agent").map(str::to_string);
     let bytes_in = header(&parts.headers, "x-amz-decoded-content-length")
         .or_else(|| header(&parts.headers, "content-length"))
@@ -72,6 +122,9 @@ pub async fn handle(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<
         Err(e) => {
             if e.status.is_server_error() {
                 tracing::warn!("{} {:?}: {} {}", method, target, e.code, e.message);
+            }
+            if matches!(e.code, "SignatureDoesNotMatch" | "InvalidAccessKeyId") {
+                auth_failed(&app, ip, "s3");
             }
             error = Some(e.code.to_string());
             e.to_response(head, &rid)

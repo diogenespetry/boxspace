@@ -132,6 +132,28 @@ No console, em **Configurações > Replicação**, cada bucket pode ter destinos
 
 As mudanças de permissão valem imediatamente, inclusive para sessões abertas no console.
 
+## Bloqueio de IPs
+
+Na página **Bloqueio de IPs** do console (somente root), você controla quais endereços podem acessar a API S3 e o console:
+
+- **Regras**: bloquear ou permitir um endereço ou uma faixa CIDR, como `203.0.113.7`, `10.0.0.0/8` ou `2001:db8::/32`. Cada regra vale para a API, para o console ou para os dois, e pode ser permanente ou expirar (1 hora, 1 dia, 7 dias, 30 dias).
+- **Modo**: *bloquear os IPs da lista* (padrão) ou *permitir só os IPs da lista*.
+- **Bloqueio automático**: um endereço que erra a autenticação várias vezes seguidas, na API (assinatura ou chave inválida) ou no login do console, fica bloqueado por um tempo. O padrão é 10 erros em 5 minutos, que geram um bloqueio de 15 minutos. Os bloqueios aparecem no console, onde podem ser desfeitos ou tornados permanentes, e terminam ao reiniciar o servidor.
+
+As regras são avaliadas nesta ordem:
+
+1. O próprio servidor (localhost) sempre passa.
+2. Uma regra de permissão libera o endereço e o isenta do bloqueio automático.
+3. Um bloqueio automático ativo recusa o acesso.
+4. Uma regra de bloqueio recusa o acesso.
+5. No modo de lista de permissão, qualquer outro endereço é recusado.
+
+Para evitar que você se tranque para fora, o console recusa salvar uma configuração que bloquearia o seu próprio endereço. Se mesmo assim perder o acesso, inicie o servidor com `BOXSPACE_IP_FILTER=off` para desligar o filtro temporariamente, ou acesse o console a partir do próprio servidor.
+
+Atrás de um proxy reverso, defina `BOXSPACE_TRUST_PROXY=1` para que o filtro use o IP real do cliente (`X-Forwarded-For`). Só faça isso se o BoxSpace **não** estiver acessível diretamente, porque o cabeçalho pode ser forjado.
+
+As requisições recusadas aparecem na auditoria (`IpBlocked`, no máximo uma por minuto por endereço) e os bloqueios automáticos como `IpBanned`. As métricas incluem `boxspace_ip_blocked_total`, `boxspace_ip_bans_total` e `boxspace_ip_bans_active`. As regras ficam salvas em todos os discos.
+
 ## Monitoramento e auditoria
 
 | Endpoint | Para quê |
@@ -167,6 +189,7 @@ boxspace healthcheck [URL]
 | `BOXSPACE_AUDIT` | `1` | `0` para desligar o log de auditoria |
 | `BOXSPACE_AUDIT_RETENTION_DAYS` | `30` | Dias de log de auditoria guardados |
 | `BOXSPACE_TRUST_PROXY` | `0` | `1` para usar `X-Forwarded-For` como IP do cliente (atrás de proxy) |
+| `BOXSPACE_IP_FILTER` | `on` | `off` desliga o bloqueio de IPs (para recuperar o acesso) |
 | `BOXSPACE_HEALTH_URL` | `http://127.0.0.1:9000/_boxspace/health` | URL usada por `boxspace healthcheck` |
 | `RUST_LOG` | `info` | `error`, `warn`, `info`, `debug` ou `trace` |
 
@@ -225,6 +248,7 @@ O console roda numa porta separada e oferece:
 - Detalhes do objeto, metadados, tags, local no disco e histórico de versões
 - Configuração de versionamento, arquivos legíveis, criptografia, acesso público, replicação, limpeza automática e webhooks
 - Chaves de acesso com permissões por bucket (root)
+- Bloqueio de IPs: regras, lista de permissão e bloqueio automático (root)
 - Auditoria com filtros (root)
 - Página do servidor: discos, espaço livre, verificação de integridade, monitoramento e exemplos de conexão
 
@@ -269,6 +293,7 @@ Os testes de recursos cobrem:
 - Reconstrução do índice
 - Arquivos legíveis
 - Permissões por bucket
+- Bloqueio de IPs: faixas IPv4 e IPv6, escopo, validade, lista de permissão, proteção contra se trancar para fora e bloqueio automático
 - Saúde, métricas e auditoria
 - Replicação entre dois servidores, inclusive multipart e proteção contra laços
 - Busca, ZIP, pré-visualização e exclusão em lote no console
@@ -292,6 +317,7 @@ Os testes de recursos cobrem:
 | `listing.rs` | Listagens com prefixo, delimitador e marcadores |
 | `ops.rs` | Operações compartilhadas entre API, console e lifecycle |
 | `metrics.rs`, `audit.rs` | Métricas Prometheus e log de auditoria |
+| `ipfilter.rs` | Bloqueio de IPs e bloqueio automático |
 | `policy.rs`, `cors.rs`, `lifecycle.rs`, `events.rs`, `crypto.rs` | Recursos de bucket |
 | `console.rs`, `zip.rs`, `console/index.html` | Console web |
 

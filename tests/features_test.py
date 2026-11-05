@@ -471,7 +471,96 @@ def t_heal_gc(binary):
         srv.stop()
 
 
-TESTS = [t_mirror, t_heal_gc, t_erasure, t_rebuild, t_readable, t_grants, t_health_metrics_audit, t_replication, t_console_extras, t_listing_scale]
+def t_ipfilter(binary):
+    srv = Server(binary, env={"BOXSPACE_TRUST_PROXY": "1"})
+    try:
+        def s3_from(ip, sk=ROOT_PASS):
+            c = client(srv, sk=sk)
+            c.meta.events.register("before-sign.s3", lambda request, **kw: request.headers.__setitem__("X-Forwarded-For", ip))
+            return c
+
+        def health(ip):
+            return requests.get(f"{srv.url}/_boxspace/health", headers={"X-Forwarded-For": ip}).status_code
+
+        admin_ip = "198.51.100.10"
+        c = console_session(srv)
+        c.headers["X-Forwarded-For"] = admin_ip
+        s3_from(admin_ip).create_bucket(Bucket="ipt")
+        cfg = c.get(f"{srv.curl}/api/ipfilter").json()
+        assert cfg["yourIp"] == admin_ip and cfg["config"]["mode"] == "blocklist", cfg
+        conf = cfg["config"]
+
+        # Manual block of a range, API only.
+        conf["rules"] = [{"cidr": "203.0.113.0/24", "action": "block", "scope": "api", "note": "teste"}]
+        assert c.put(f"{srv.curl}/api/ipfilter", json=conf).status_code == 200
+        assert err_code(s3_from("203.0.113.5").list_buckets) == "AccessDenied"
+        assert health("203.0.113.200") == 403
+        assert health("203.0.114.1") == 200
+        r = requests.get(f"{srv.curl}/", headers={"X-Forwarded-For": "203.0.113.5"})
+        assert r.status_code == 200, "scope=api leaves the console open"
+        assert s3_from("192.0.2.1").list_buckets()["Buckets"]
+        assert requests.get(f"{srv.url}/_boxspace/health").status_code == 200, "loopback is never blocked"
+
+        # Expired rules are ignored; invalid ranges are rejected.
+        conf["rules"].append({"cidr": "192.0.2.0/24", "action": "block", "scope": "all", "expires": "2020-01-01T00:00:00Z"})
+        assert c.put(f"{srv.curl}/api/ipfilter", json=conf).status_code == 200
+        assert health("192.0.2.9") == 200
+        bad = dict(conf, rules=[{"cidr": "10.0.0.0/40", "action": "block", "scope": "all"}])
+        assert c.put(f"{srv.curl}/api/ipfilter", json=bad).status_code == 400
+
+        # Lockout protection: cannot block your own console access.
+        selfblock = dict(conf, rules=[{"cidr": "198.51.100.0/24", "action": "block", "scope": "all"}])
+        r = c.put(f"{srv.curl}/api/ipfilter", json=selfblock)
+        assert r.status_code == 400 and admin_ip in r.json()["error"], r.text
+        allowlist = dict(conf, mode="allowlist", rules=[])
+        assert c.put(f"{srv.curl}/api/ipfilter", json=allowlist).status_code == 400
+        allowlist["rules"] = [{"cidr": "198.51.100.0/24", "action": "allow", "scope": "all"}, {"cidr": "2001:db8::/32", "action": "allow", "scope": "api"}]
+        assert c.put(f"{srv.curl}/api/ipfilter", json=allowlist).status_code == 200
+        assert health("192.0.2.1") == 403
+        assert health("198.51.100.77") == 200
+        assert health("2001:db8::5") == 200
+        assert requests.get(f"{srv.curl}/", headers={"X-Forwarded-For": "2001:db8::5"}).status_code == 403, "IPv6 allow was API only"
+
+        # Automatic ban after repeated failures (S3 and console logins).
+        conf = dict(mode="blocklist", rules=[], auto={"enabled": True, "maxFailures": 3, "windowSecs": 60, "banSecs": 600})
+        assert c.put(f"{srv.curl}/api/ipfilter", json=conf).status_code == 200
+        attacker = "192.0.2.66"
+        for _ in range(3):
+            assert err_code(s3_from(attacker, sk="wrong-secret").list_buckets) == "SignatureDoesNotMatch"
+        assert err_code(s3_from(attacker).list_buckets) == "AccessDenied", "banned even with the right key"
+        guesser = "192.0.2.77"
+        for _ in range(3):
+            requests.post(f"{srv.curl}/api/login", json={"accessKey": ROOT_USER, "secretKey": "nope"}, headers={"X-Forwarded-For": guesser})
+        r = requests.post(f"{srv.curl}/api/login", json={"accessKey": ROOT_USER, "secretKey": ROOT_PASS}, headers={"X-Forwarded-For": guesser})
+        assert r.status_code == 403, r.status_code
+        bans = {b["ip"] for b in c.get(f"{srv.curl}/api/ipfilter").json()["bans"]}
+        assert bans == {attacker, guesser}, bans
+        assert c.delete(f"{srv.curl}/api/ipfilter/bans/{attacker}").json()["ok"]
+        assert s3_from(attacker).list_buckets()["Buckets"]
+        # Allow rules exempt an address from automatic bans.
+        conf["rules"] = [{"cidr": "192.0.2.88", "action": "allow", "scope": "all"}]
+        assert c.put(f"{srv.curl}/api/ipfilter", json=conf).status_code == 200
+        for _ in range(5):
+            err_code(s3_from("192.0.2.88", sk="wrong").list_buckets)
+        assert s3_from("192.0.2.88").list_buckets()["Buckets"]
+
+        # Audit, metrics, persistence.
+        time.sleep(0.3)
+        lines = [json.loads(line) for f in glob.glob(os.path.join(srv.disks[0], ".boxspace", "audit", "*.jsonl")) for line in open(f)]
+        assert any(e["op"] == "IpBanned" and e["remote"] == attacker for e in lines)
+        assert any(e["op"] == "IpBlocked" for e in lines)
+        m = requests.get(f"{srv.url}/_boxspace/metrics", headers={"Authorization": "Bearer metrics-token"}).text
+        assert "boxspace_ip_blocked_total" in m and "boxspace_ip_bans_total 2" in m, m[-800:]
+        conf["rules"].append({"cidr": "203.0.113.0/24", "action": "block", "scope": "all"})
+        assert c.put(f"{srv.curl}/api/ipfilter", json=conf).status_code == 200
+        srv.restart()
+        assert health("203.0.113.1") == 403, "rules survive a restart"
+        assert health(guesser) == 200, "automatic bans end on restart"
+    finally:
+        srv.stop()
+
+
+TESTS = [t_mirror, t_heal_gc, t_ipfilter, t_erasure, t_rebuild, t_readable, t_grants, t_health_metrics_audit, t_replication, t_console_extras, t_listing_scale]
 
 
 def main():

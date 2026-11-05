@@ -13,6 +13,7 @@ mod disk;
 mod error;
 mod events;
 mod heal;
+mod ipfilter;
 mod lifecycle;
 mod listing;
 mod metrics;
@@ -43,6 +44,7 @@ pub struct App {
     pub metrics: metrics::Metrics,
     pub audit: audit::Audit,
     pub repl_wake: Notify,
+    pub ipfilter: ipfilter::IpFilter,
 }
 
 fn fail(msg: impl std::fmt::Display) -> ! {
@@ -90,6 +92,8 @@ async fn main() {
     }
 
     let replaced = !disks.replaced.is_empty();
+    let ip_cfg: ipfilter::IpConfig = store.get_setting("ipfilter").ok().flatten().unwrap_or_default();
+    let ip_off = matches!(std::env::var("BOXSPACE_IP_FILTER").ok().as_deref(), Some("off" | "0" | "false"));
     let app = Arc::new(App {
         cfg,
         disks: Arc::new(disks),
@@ -102,6 +106,7 @@ async fn main() {
         metrics: metrics::Metrics::default(),
         audit,
         repl_wake: Notify::new(),
+        ipfilter: ipfilter::IpFilter::new(ip_cfg, ip_off),
     });
 
     let mut rebuilt = false;
@@ -111,6 +116,9 @@ async fn main() {
             Ok((b, v)) => {
                 tracing::info!("índice reconstruído: {b} bucket(s), {v} versão(ões)");
                 rebuilt = true;
+                if let Ok(Some(cfg)) = app.store.get_setting::<ipfilter::IpConfig>("ipfilter") {
+                    let _ = app.ipfilter.set(cfg);
+                }
             }
             Err(e) => fail(format!("falha ao reconstruir o índice: {}", e.message)),
         }
