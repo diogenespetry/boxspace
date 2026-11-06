@@ -3,203 +3,359 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
 <title>BoxSpace</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect x='3' y='7' width='26' height='19' rx='2' fill='%231E4D6B'/%3E%3Crect x='3' y='7' width='26' height='5' fill='%23F2C230'/%3E%3C/svg%3E">
 <style>
+/* ===== Tokens ===== */
 :root {
-  --steel: #1E4D6B;
-  --steel-deep: #163A51;
-  --steel-soft: #DCE6EE;
-  --concrete: #EDF0F2;
+  --bg: #ECEFF2;
   --surface: #FFFFFF;
-  --ink: #17222C;
-  --ink-2: #4C5A66;
-  --ink-3: #7B8792;
-  --line: #D5DBE0;
+  --well: #F5F7F9;
+  --line: #DCE2E7;
+  --line-strong: #C5CED6;
+  --ink: #15202A;
+  --ink-2: #4A5865;
+  --ink-3: #7B8894;
+  --steel: #1E4D6B;
+  --steel-hover: #163B53;
+  --steel-ink: #1E4D6B;
+  --steel-soft: #E1EAF1;
+  --rail: #1E4D6B;
+  --rail-deep: #173E57;
   --mark: #F2C230;
-  --danger: #B8342A;
+  --mark-soft: #FFF5D1;
+  --mark-ink: #6B5100;
   --ok: #2F7A4F;
+  --ok-soft: #DFF1E6;
+  --danger: #B3362B;
+  --danger-soft: #FBE5E2;
+  --shadow: 0 1px 2px rgba(16, 40, 60, .06), 0 1px 1px rgba(16, 40, 60, .04);
+  --shadow-lg: 0 24px 60px rgba(12, 30, 45, .28);
   --display: Bahnschrift, "DIN Alternate", "DIN 2014", "Roboto Condensed", system-ui, sans-serif;
   --body: system-ui, -apple-system, "Segoe UI", Roboto, "Noto Sans", sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-  --r: 6px;
+  --mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas, monospace;
+  --r: 8px;
+  --r-lg: 12px;
 }
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0E171E;
+    --surface: #16212A;
+    --well: #1B2832;
+    --line: #26353F;
+    --line-strong: #344651;
+    --ink: #E5ECF1;
+    --ink-2: #A7B5C0;
+    --ink-3: #7A8994;
+    --steel: #3B83B3;
+    --steel-hover: #4A93C4;
+    --steel-ink: #86BCE0;
+    --steel-soft: #1D3445;
+    --rail: #10283A;
+    --rail-deep: #0C2030;
+    --mark-soft: #3A3011;
+    --mark-ink: #F2D474;
+    --ok: #55B37D;
+    --ok-soft: #173525;
+    --danger: #E06C61;
+    --danger-soft: #3D1D1A;
+    --shadow: 0 1px 2px rgba(0, 0, 0, .3);
+    --shadow-lg: 0 24px 60px rgba(0, 0, 0, .55);
+  }
+}
+
+/* ===== Base ===== */
 * { box-sizing: border-box; }
 html, body { margin: 0; height: 100%; }
-body { font: 15px/1.5 var(--body); color: var(--ink); background: var(--concrete); -webkit-font-smoothing: antialiased; accent-color: var(--steel); }
+body { font: 15px/1.5 var(--body); color: var(--ink); background: var(--bg); -webkit-font-smoothing: antialiased; accent-color: var(--steel); }
 button, input, select, textarea { font: inherit; color: inherit; }
-a { color: var(--steel); }
-:focus-visible { outline: 3px solid var(--mark); outline-offset: 2px; }
+a { color: var(--steel-ink); }
+:focus-visible { outline: 3px solid var(--mark); outline-offset: 2px; border-radius: 4px; }
 .num { font-variant-numeric: tabular-nums; }
-h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .01em; margin: 0; }
-h1 { font-size: 1.6rem; line-height: 1.2; }
-h2 { font-size: 1.2rem; }
-h3 { font-size: 1rem; }
+h1, h2, h3 { font-family: var(--display); font-weight: 600; letter-spacing: .005em; margin: 0; }
+h1 { font-size: 1.75rem; line-height: 1.15; }
+h2 { font-size: 1.08rem; line-height: 1.3; }
+h3 { font-size: .98rem; }
+p { margin: 0; }
 .muted { color: var(--ink-2); }
-.small { font-size: .85rem; }
+.faint { color: var(--ink-3); }
+.small { font-size: .86rem; }
+code, .mono { font-family: var(--mono); font-size: .86em; word-break: break-all; }
 [hidden] { display: none !important; }
+.icon { width: 1.15em; height: 1.15em; flex: none; }
 
-.btn { display: inline-flex; align-items: center; gap: .4em; border: 1px solid var(--line); background: var(--surface); padding: .45em .9em; border-radius: var(--r); cursor: pointer; white-space: nowrap; text-decoration: none; color: var(--ink); }
-.btn:hover { border-color: var(--ink-3); }
+/* ===== Buttons ===== */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: .45em; min-height: 36px; border: 1px solid var(--line-strong); background: var(--surface); padding: 0 14px; border-radius: var(--r); cursor: pointer; white-space: nowrap; text-decoration: none; color: var(--ink); font-weight: 500; transition: background .12s, border-color .12s; }
+.btn:hover { border-color: var(--ink-3); background: var(--well); }
 .btn.primary { background: var(--steel); border-color: var(--steel); color: #fff; }
-.btn.primary:hover { background: var(--steel-deep); }
+.btn.primary:hover { background: var(--steel-hover); border-color: var(--steel-hover); }
 .btn.danger { color: var(--danger); }
 .btn.danger.solid { background: var(--danger); border-color: var(--danger); color: #fff; }
-.btn.link { border: 0; background: none; padding: .2em .35em; color: var(--steel); }
-.btn.link:hover { text-decoration: underline; }
-.btn.small { padding: .25em .6em; font-size: .88rem; }
+.btn.ghost { border-color: transparent; background: transparent; }
+.btn.ghost:hover { background: var(--well); }
+.btn.link { border: 0; background: none; min-height: 0; padding: 4px 6px; color: var(--steel-ink); font-weight: 500; }
+.btn.link:hover { text-decoration: underline; background: none; }
+.btn.link.danger { color: var(--danger); }
+.btn.sm { min-height: 30px; padding: 0 10px; font-size: .88rem; }
 .btn[disabled] { opacity: .5; cursor: default; }
-.icon { width: 1.1em; height: 1.1em; flex: none; }
 
-.login { min-height: 100%; display: grid; place-items: center; padding: 24px; background: var(--steel); }
-.login form { width: min(380px, 100%); background: var(--surface); border-radius: 10px; padding: 32px; box-shadow: 0 20px 50px rgba(10, 30, 45, .35); }
-.login .brand { display: flex; align-items: center; gap: 10px; margin-bottom: 24px; }
-.login .brand h1 { font-size: 1.8rem; }
-.field { display: grid; gap: 4px; margin-bottom: 14px; }
-.field label { font-size: .85rem; color: var(--ink-2); }
-.field input, .field select, .field textarea, input.text { border: 1px solid var(--line); border-radius: var(--r); padding: .55em .7em; background: #fff; width: 100%; }
-.field textarea { font-family: var(--mono); font-size: .85rem; min-height: 220px; resize: vertical; }
-.check { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; margin-bottom: 12px; }
+/* ===== Forms ===== */
+.field { display: grid; gap: 5px; margin-bottom: 14px; }
+.field label, .label { font-size: .84rem; font-weight: 500; color: var(--ink-2); }
+.input, .field input, .field select, .field textarea { border: 1px solid var(--line-strong); border-radius: var(--r); padding: 0 11px; min-height: 38px; background: var(--surface); width: 100%; }
+.field textarea { font-family: var(--mono); font-size: .85rem; min-height: 220px; padding: 10px 12px; resize: vertical; line-height: 1.5; }
+.input:focus, .field input:focus, .field select:focus, .field textarea:focus { outline: none; border-color: var(--steel); box-shadow: 0 0 0 3px var(--steel-soft); }
+.sm-only { display: none; }
+.hint { font-size: .84rem; color: var(--ink-3); margin-top: -8px; margin-bottom: 14px; }
+.check { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
 .check input { margin-top: 4px; }
 .err { color: var(--danger); font-size: .9rem; min-height: 1.4em; }
 
-.shell { display: grid; grid-template-columns: 220px 1fr; min-height: 100%; }
-.rail { background: var(--steel); color: #fff; display: flex; flex-direction: column; padding: 18px 12px; position: sticky; top: 0; height: 100vh; align-self: start; }
-.rail .brand { display: flex; align-items: center; gap: 9px; padding: 4px 8px 22px; }
-.rail .brand span { font-family: var(--display); font-size: 1.35rem; font-weight: 600; }
-.rail nav { display: grid; gap: 2px; }
-.rail nav a { color: #DCE6EE; text-decoration: none; padding: 8px 10px; border-radius: var(--r); display: flex; gap: 10px; align-items: center; border-left: 4px solid transparent; }
-.rail nav a:hover { background: rgba(255,255,255,.08); color: #fff; }
-.rail nav a[aria-current="page"] { background: rgba(255,255,255,.12); color: #fff; border-left-color: var(--mark); }
-.rail .who { margin-top: auto; padding: 12px 10px 0; border-top: 1px solid rgba(255,255,255,.15); font-size: .85rem; color: #C4D3DE; }
-.rail .who strong { color: #fff; display: block; font-weight: 600; word-break: break-all; }
-.rail .who .btn { margin-top: 8px; color: #fff; background: transparent; border-color: rgba(255,255,255,.3); }
-main { padding: 26px 32px 60px; min-width: 0; }
-.head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 18px; }
-.head .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-.banner { background: #FFF4CC; border: 1px solid #E8CF70; border-radius: var(--r); padding: 10px 14px; margin-bottom: 18px; font-size: .92rem; }
-.banner.bad { background: #FBE4E1; border-color: #E5A39B; }
-.note { font-size: .9rem; color: var(--ink-2); margin: 12px 0 0; }
-
-.path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; font-family: var(--display); font-size: 1.45rem; font-weight: 600; padding-bottom: 6px; border-bottom: 4px solid var(--mark); width: fit-content; max-width: 100%; }
-.path a { text-decoration: none; color: var(--ink-2); padding: 0 2px; border-radius: 3px; }
-.path a:hover { color: var(--steel); }
-.path .sep { color: var(--ink-3); padding: 0 4px; font-weight: 400; }
-.path .here { color: var(--ink); word-break: break-all; }
-.tabs { display: flex; gap: 4px; margin: 18px 0 0; border-bottom: 1px solid var(--line); }
-.tabs a { padding: 8px 14px; text-decoration: none; color: var(--ink-2); border-bottom: 3px solid transparent; margin-bottom: -1px; }
-.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--steel); font-weight: 600; }
-
-.toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 16px 0 10px; }
-.toolbar form { display: flex; gap: 6px; flex: 1 1 260px; max-width: 420px; }
-.bulk { display: flex; gap: 8px; align-items: center; background: var(--steel-soft); border-radius: var(--r); padding: 6px 10px; flex-wrap: wrap; }
-.bulk b { font-weight: 600; margin-right: 4px; }
-
-.panel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
-table { width: 100%; border-collapse: collapse; }
-th { text-align: left; font-weight: 600; font-size: .82rem; color: var(--ink-2); padding: 10px 14px; border-bottom: 1px solid var(--line); background: #F7F9FA; }
-td { padding: 9px 14px; border-bottom: 1px solid #EBEEF1; vertical-align: middle; }
-tr:last-child td { border-bottom: 0; }
-tbody tr:hover { background: #F5F8FA; }
-tbody tr.sel { background: #FFF8DB; }
-td.r, th.r { text-align: right; }
-td.cb, th.cb { width: 36px; padding-right: 0; }
-td.name { word-break: break-all; }
-td.name a { text-decoration: none; color: var(--ink); font-weight: 500; display: inline-flex; gap: 8px; align-items: center; }
-td.name a:hover { color: var(--steel); text-decoration: underline; }
-.row-actions { display: flex; gap: 2px; justify-content: flex-end; }
-.tag { display: inline-block; font-size: .78rem; padding: 1px 8px; border-radius: 99px; background: var(--steel-soft); color: var(--steel-deep); margin-right: 4px; white-space: nowrap; }
-.tag.warn { background: #FFF1C2; color: #6A5000; }
-.tag.bad { background: #FBE4E1; color: #8A2219; }
-.tag.good { background: #DDF1E4; color: #1F5A37; }
-.empty { padding: 48px 20px; text-align: center; color: var(--ink-2); }
-.empty h3 { color: var(--ink); margin-bottom: 6px; }
-.dropping .panel { outline: 3px dashed var(--steel); outline-offset: -3px; }
-.more { padding: 12px; text-align: center; border-top: 1px solid var(--line); }
-
-.section { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 20px 22px; margin-top: 16px; }
-.section > p { margin: 4px 0 14px; color: var(--ink-2); max-width: 72ch; }
-.switch { display: flex; align-items: center; gap: 10px; cursor: pointer; }
-.switch input { width: 40px; height: 22px; appearance: none; background: #C7CFD6; border-radius: 99px; position: relative; cursor: pointer; transition: background .15s; flex: none; }
-.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .15s; }
+.switch { display: inline-flex; align-items: center; gap: 10px; cursor: pointer; }
+.switch input { width: 42px; height: 24px; appearance: none; background: var(--line-strong); border-radius: 99px; position: relative; cursor: pointer; transition: background .15s; flex: none; margin: 0; }
+.switch input::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0,0,0,.2); transition: transform .15s; }
 .switch input:checked { background: var(--steel); }
 .switch input:checked::after { transform: translateX(18px); }
 .switch input:disabled { opacity: .5; cursor: default; }
-.radios { display: grid; gap: 8px; margin-bottom: 12px; }
-.radios label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
-.radios input { margin-top: 4px; }
-.grid-rows { display: grid; gap: 8px; margin-bottom: 12px; }
-.row-box { display: grid; gap: 8px; align-items: end; padding: 10px; background: #F7F9FA; border-radius: var(--r); }
+.switch span { font-size: .9rem; color: var(--ink-2); }
+
+/* Choice cards (radio groups) */
+.choices { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
+.choice { position: relative; display: grid; align-content: start; gap: 3px; padding: 14px 16px 14px 44px; border: 1px solid var(--line-strong); border-radius: var(--r); cursor: pointer; background: var(--surface); transition: border-color .12s, background .12s; }
+.choice:hover { border-color: var(--ink-3); }
+.choice input { position: absolute; left: 16px; top: 17px; margin: 0; }
+.choice b { font-weight: 600; }
+.choice span { font-size: .86rem; color: var(--ink-2); }
+.choice:has(input:checked) { border-color: var(--steel); background: var(--steel-soft); box-shadow: inset 0 0 0 1px var(--steel); }
+.choice:has(input:disabled) { cursor: default; opacity: .7; }
+
+/* ===== Login ===== */
+.login { min-height: 100vh; display: grid; grid-template-columns: minmax(320px, 1fr) minmax(360px, 520px); background: var(--surface); }
+.login-brand { position: relative; background: var(--rail); color: #fff; padding: 48px; display: flex; flex-direction: column; justify-content: center; overflow: hidden; }
+.login-brand .wordmark { display: flex; align-items: center; gap: 14px; }
+.login-brand .wordmark span { font-family: var(--display); font-size: clamp(2.6rem, 5vw, 3.6rem); font-weight: 600; letter-spacing: .01em; }
+.login-brand p { margin-top: 14px; font-size: 1.1rem; color: #C9DAE6; max-width: 30ch; }
+.login-brand .stripes { position: absolute; left: 0; right: 0; bottom: 0; height: 18px; background: repeating-linear-gradient(-45deg, var(--mark) 0 16px, var(--rail-deep) 16px 32px); }
+.login-form { display: grid; place-items: center; padding: 32px; background: var(--bg); }
+.login-form form { width: min(380px, 100%); }
+.login-form h1 { margin-bottom: 4px; }
+.login-form .sub { color: var(--ink-2); margin-bottom: 24px; }
+
+/* ===== Shell ===== */
+.shell { display: grid; grid-template-columns: 236px 1fr; min-height: 100vh; background: linear-gradient(to right, var(--rail) 236px, transparent 236px); }
+.rail { background: var(--rail); color: #fff; display: flex; flex-direction: column; padding: 18px 12px 16px; position: sticky; top: 0; height: 100vh; align-self: start; }
+.rail .brand { display: flex; align-items: center; gap: 10px; padding: 4px 10px 20px; text-decoration: none; color: #fff; }
+.rail .brand span { font-family: var(--display); font-size: 1.4rem; font-weight: 600; }
+.rail nav { display: grid; gap: 2px; }
+.rail .group { font-size: .74rem; font-weight: 600; color: #93B1C6; padding: 14px 12px 6px; letter-spacing: .02em; }
+.rail nav a { color: #D6E3EC; text-decoration: none; padding: 8px 12px; border-radius: var(--r); display: flex; gap: 11px; align-items: center; position: relative; font-weight: 500; }
+.rail nav a:hover { background: rgba(255,255,255,.07); color: #fff; }
+.rail nav a[aria-current="page"] { background: rgba(255,255,255,.12); color: #fff; }
+.rail nav a[aria-current="page"]::before { content: ""; position: absolute; left: -12px; top: 8px; bottom: 8px; width: 4px; border-radius: 0 3px 3px 0; background: var(--mark); }
+.rail .who { margin-top: auto; padding: 12px; border-radius: var(--r); background: rgba(0,0,0,.14); display: flex; align-items: center; gap: 10px; }
+.rail .avatar { width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; background: var(--mark); color: #2B2100; font-weight: 700; font-family: var(--display); flex: none; }
+.rail .who-text { min-width: 0; flex: 1; font-size: .84rem; color: #B9CEDC; }
+.rail .who-text strong { display: block; color: #fff; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail .who .btn { min-height: 30px; padding: 0 10px; color: #fff; background: transparent; border-color: rgba(255,255,255,.25); font-size: .85rem; }
+.rail .who .btn:hover { background: rgba(255,255,255,.1); }
+main { padding: 30px 40px 72px; min-width: 0; max-width: 1240px; width: 100%; }
+
+/* ===== Page header ===== */
+.page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px 24px; flex-wrap: wrap; margin-bottom: 22px; }
+.page-head .lead { margin-top: 6px; color: var(--ink-2); max-width: 72ch; }
+.page-head .actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.banner { display: flex; gap: 10px; align-items: flex-start; border-radius: var(--r); padding: 12px 14px; margin-bottom: 18px; font-size: .92rem; background: var(--mark-soft); color: var(--mark-ink); border: 1px solid color-mix(in srgb, var(--mark) 55%, transparent); }
+.banner.bad { background: var(--danger-soft); color: var(--danger); border-color: color-mix(in srgb, var(--danger) 35%, transparent); }
+.banner a { color: inherit; font-weight: 600; }
+
+/* Breadcrumb with the floor marking */
+.path { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px; font-family: var(--display); font-size: 1.55rem; font-weight: 600; padding-bottom: 6px; border-bottom: 4px solid var(--mark); width: fit-content; max-width: 100%; line-height: 1.2; }
+.path a { text-decoration: none; color: var(--ink-3); padding: 0 2px; border-radius: 3px; }
+.path a:hover { color: var(--steel-ink); }
+.path .sep { color: var(--ink-3); padding: 0 5px; font-weight: 400; }
+.path .here { color: var(--ink); word-break: break-all; }
+.tabs { display: flex; gap: 4px; margin: 20px 0 18px; border-bottom: 1px solid var(--line); }
+.tabs a { padding: 9px 14px; text-decoration: none; color: var(--ink-2); border-bottom: 2px solid transparent; margin-bottom: -1px; font-weight: 500; }
+.tabs a:hover { color: var(--ink); }
+.tabs a[aria-current="page"] { color: var(--ink); border-bottom-color: var(--steel); }
+
+/* ===== Cards ===== */
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow); margin-bottom: 16px; overflow: hidden; }
+.card-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; padding: 18px 22px; }
+.card-head .desc { margin-top: 4px; color: var(--ink-2); font-size: .9rem; max-width: 70ch; }
+.card-head .ctl { flex: none; padding-top: 2px; }
+.card-body { padding: 0 22px 20px; }
+.card-body.flush { padding: 0; border-top: 1px solid var(--line); }
+.card-foot { display: flex; justify-content: flex-end; align-items: center; gap: 8px; padding: 12px 22px; background: var(--well); border-top: 1px solid var(--line); flex-wrap: wrap; }
+.card-foot .left { margin-right: auto; }
+.card.locked .card-head .ctl { opacity: .7; }
+
+/* ===== Tables ===== */
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-weight: 600; font-size: .78rem; color: var(--ink-3); padding: 10px 16px; border-bottom: 1px solid var(--line); background: var(--well); white-space: nowrap; }
+td { padding: 11px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr { transition: background .1s; }
+tbody tr:hover { background: var(--well); }
+tbody tr.sel { background: var(--mark-soft); }
+td.r, th.r { text-align: right; }
+td.cb, th.cb { width: 40px; padding-right: 0; }
+td.name { word-break: break-all; }
+td.name a { text-decoration: none; color: var(--ink); font-weight: 500; display: inline-flex; gap: 10px; align-items: center; }
+td.name a:hover { color: var(--steel-ink); }
+td.name .icon { color: var(--ink-3); }
+td.name a:hover .icon { color: var(--steel-ink); }
+.ficon { width: 30px; height: 30px; border-radius: 7px; display: grid; place-items: center; background: var(--steel-soft); color: var(--steel-ink); flex: none; }
+.ficon.folder { background: var(--mark-soft); color: var(--mark-ink); }
+.ficon .icon { color: inherit !important; }
+.row-actions { display: flex; gap: 2px; justify-content: flex-end; }
+.usage { display: grid; gap: 4px; min-width: 120px; }
+.bar { height: 6px; border-radius: 3px; background: var(--well); box-shadow: inset 0 0 0 1px var(--line); overflow: hidden; }
+.bar i { display: block; height: 100%; background: var(--steel); border-radius: 3px; }
+.bar.warn i { background: var(--mark); }
+.bar.bad i { background: var(--danger); }
+
+/* Chips */
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: .78rem; font-weight: 500; padding: 2px 9px 2px 8px; border-radius: 99px; background: var(--steel-soft); color: var(--steel-ink); white-space: nowrap; margin: 1px 4px 1px 0; }
+.chip i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: none; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.chip.warn { background: var(--mark-soft); color: var(--mark-ink); }
+.chip.bad { background: var(--danger-soft); color: var(--danger); }
+.chip.plain { background: var(--well); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line); }
+
+/* Empty states */
+.empty { padding: 44px 24px; text-align: center; color: var(--ink-2); display: grid; justify-items: center; gap: 8px; }
+.empty .art { width: 64px; height: 64px; border-radius: 16px; display: grid; place-items: center; background: var(--well); color: var(--ink-3); box-shadow: inset 0 0 0 1px var(--line); margin-bottom: 6px; }
+.empty .art .icon { width: 30px; height: 30px; }
+.empty h3 { color: var(--ink); font-size: 1.05rem; }
+.empty p { max-width: 46ch; }
+.empty .btn { margin-top: 8px; }
+
+/* Toolbar, bulk bar */
+.toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.search { position: relative; flex: 1 1 260px; max-width: 440px; display: flex; gap: 6px; }
+.search .icon { position: absolute; left: 11px; top: 50%; transform: translateY(-50%); color: var(--ink-3); pointer-events: none; }
+.search input { padding-left: 36px; }
+.bulk { display: flex; gap: 8px; align-items: center; background: var(--rail); color: #fff; border-radius: var(--r); padding: 5px 6px 5px 14px; flex-wrap: wrap; box-shadow: var(--shadow); }
+.bulk b { font-weight: 600; margin-right: 6px; }
+.bulk .btn { min-height: 30px; font-size: .88rem; background: rgba(255,255,255,.12); border-color: transparent; color: #fff; }
+.bulk .btn:hover { background: rgba(255,255,255,.2); }
+.bulk .btn.danger { color: #FFC9C2; }
+.note { font-size: .88rem; color: var(--ink-2); display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.dropping .card { outline: 3px dashed var(--steel); outline-offset: -3px; }
+.more { padding: 12px; text-align: center; border-top: 1px solid var(--line); }
+
+/* Stats */
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stat { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px 18px; box-shadow: var(--shadow); }
+.stat b { display: block; font-family: var(--display); font-size: 1.85rem; font-weight: 600; line-height: 1.15; }
+.stat span { font-size: .86rem; color: var(--ink-2); }
+
+/* Editable row boxes */
+.grid-rows { display: grid; gap: 10px; }
+.row-box { display: grid; gap: 10px; align-items: end; padding: 14px; background: var(--well); border: 1px solid var(--line); border-radius: var(--r); }
 .rule { grid-template-columns: 1.4fr repeat(3, .8fr) auto auto; }
 .hook { grid-template-columns: 2fr 1.2fr .8fr .8fr auto; }
 .target { grid-template-columns: 1.6fr 1fr .7fr 1fr 1fr; }
-.target .opts { grid-column: 1 / -1; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.target .opts { grid-column: 1 / -1; display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 .grant { grid-template-columns: 1fr 180px auto; }
+.trio { grid-template-columns: repeat(3, 1fr); }
 .row-box .field { margin: 0; }
-.row-box input, .row-box select { padding: .4em .55em; }
 
-.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; }
-.stats div { padding: 16px 20px; border-right: 1px solid var(--line); }
-.stats div:last-child { border-right: 0; }
-.stats b { display: block; font-family: var(--display); font-size: 1.7rem; font-weight: 600; }
-.meter { height: 6px; background: #E3E8EC; border-radius: 3px; overflow: hidden; min-width: 120px; }
-.meter i { display: block; height: 100%; background: var(--steel); }
-pre { background: #F3F5F7; border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; overflow: auto; font: .85rem/1.5 var(--mono); }
-code { font-family: var(--mono); font-size: .9em; word-break: break-all; }
+/* Disk bays */
+.bays { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; }
+.bay { border: 1px solid var(--line); border-radius: var(--r); background: var(--well); padding: 14px; display: grid; gap: 10px; }
+.bay-top { display: flex; align-items: center; gap: 10px; }
+.drive { width: 34px; height: 44px; border-radius: 5px; background: var(--steel); position: relative; flex: none; box-shadow: inset 0 -10px 0 rgba(0,0,0,.18); }
+.drive::after { content: ""; position: absolute; left: 7px; bottom: 4px; width: 6px; height: 6px; border-radius: 50%; background: #6EE7A0; box-shadow: 0 0 6px #6EE7A0; }
+.bay.off .drive { background: var(--line-strong); }
+.bay.off .drive::after { background: #FF7A6E; box-shadow: 0 0 6px #FF7A6E; }
+.bay-title { font-family: var(--display); font-weight: 600; font-size: 1.05rem; }
+.bay code { font-size: .8rem; color: var(--ink-2); }
 
-.drawer { position: fixed; inset: 0 0 0 auto; width: min(520px, 100%); background: var(--surface); border-left: 1px solid var(--line); transform: translateX(100%); visibility: hidden; transition: transform .2s ease, visibility 0s linear .2s; z-index: 20; display: flex; flex-direction: column; }
-.drawer.open { transform: none; visibility: visible; box-shadow: -12px 0 30px rgba(10,30,45,.12); transition: transform .2s ease; }
-.drawer header { padding: 18px 20px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.drawer header h2 { word-break: break-all; }
-.drawer .body { padding: 18px 20px; overflow: auto; flex: 1; }
-.preview { margin-bottom: 16px; border: 1px solid var(--line); border-radius: var(--r); background: #F7F9FA; overflow: hidden; }
-.preview img, .preview video { display: block; max-width: 100%; max-height: 320px; margin: 0 auto; }
-.preview iframe { display: block; width: 100%; height: 380px; border: 0; background: #fff; }
+/* Erasure diagram */
+.shards { display: flex; gap: 4px; flex-wrap: wrap; margin: 0 0 14px; }
+.shard { min-width: 38px; height: 30px; padding: 0 6px; border-radius: 5px; display: grid; place-items: center; font: 600 .75rem var(--mono); }
+.shard.d { background: var(--steel); color: #fff; }
+.shard.p { background: var(--mark-soft); color: var(--mark-ink); box-shadow: inset 0 0 0 2px var(--mark); }
+
+/* Key/value lists */
+dl.kv { display: grid; grid-template-columns: 10em 1fr; gap: 8px 14px; margin: 0; font-size: .92rem; }
+dl.kv dt { color: var(--ink-3); }
+dl.kv dd { margin: 0; word-break: break-word; }
+pre { background: var(--well); border: 1px solid var(--line); border-radius: var(--r); padding: 12px 14px; overflow: auto; font: .84rem/1.55 var(--mono); margin: 8px 0 14px; }
+.snippets h3 { margin: 16px 0 0; font-size: .92rem; }
+
+/* Drawer */
+.drawer { position: fixed; inset: 0 0 0 auto; width: min(540px, 100%); background: var(--surface); border-left: 1px solid var(--line); transform: translateX(100%); visibility: hidden; transition: transform .22s ease, visibility 0s linear .22s; z-index: 20; display: flex; flex-direction: column; }
+.drawer.open { transform: none; visibility: visible; box-shadow: var(--shadow-lg); transition: transform .22s ease; }
+.drawer header { padding: 18px 22px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.drawer header h2 { word-break: break-all; font-size: 1.2rem; }
+.drawer .body { padding: 20px 22px; overflow: auto; flex: 1; display: grid; gap: 18px; align-content: start; }
+.preview { border: 1px solid var(--line); border-radius: var(--r); background: repeating-conic-gradient(var(--well) 0% 25%, var(--surface) 0% 50%) 50% / 18px 18px; overflow: hidden; }
+.preview img, .preview video { display: block; max-width: 100%; max-height: 340px; margin: 0 auto; }
+.preview iframe { display: block; width: 100%; height: 400px; border: 0; background: #fff; }
 .preview audio { display: block; width: 100%; }
-.preview pre { margin: 0; border: 0; max-height: 300px; white-space: pre-wrap; word-break: break-word; }
-dl.kv { display: grid; grid-template-columns: 9em 1fr; gap: 6px 12px; margin: 0 0 18px; font-size: .92rem; }
-dl.kv dt { color: var(--ink-2); }
-dl.kv dd { margin: 0; word-break: break-all; }
-.versions li { display: flex; justify-content: space-between; gap: 8px; padding: 8px 0; border-bottom: 1px solid #EBEEF1; font-size: .9rem; }
-.versions { list-style: none; padding: 0; margin: 8px 0 0; }
+.preview pre { margin: 0; border: 0; border-radius: 0; max-height: 300px; white-space: pre-wrap; word-break: break-word; }
+.versions { list-style: none; padding: 0; margin: 0; border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.versions li { display: flex; justify-content: space-between; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--line); font-size: .9rem; align-items: center; }
+.versions li:last-child { border-bottom: 0; }
 
-dialog { border: 0; border-radius: 10px; padding: 0; width: min(560px, calc(100% - 32px)); box-shadow: 0 24px 60px rgba(10,30,45,.3); }
-dialog::backdrop { background: rgba(20, 35, 48, .45); }
-dialog form { padding: 22px 24px; max-height: calc(100vh - 60px); overflow: auto; }
-dialog h2 { margin-bottom: 12px; }
+/* Dialog */
+dialog { border: 0; border-radius: var(--r-lg); padding: 0; width: min(560px, calc(100% - 32px)); box-shadow: var(--shadow-lg); background: var(--surface); color: var(--ink); }
+dialog::backdrop { background: rgba(12, 26, 38, .5); backdrop-filter: blur(2px); }
+dialog form { padding: 24px; max-height: calc(100vh - 60px); overflow: auto; }
+dialog h2 { margin-bottom: 14px; font-size: 1.25rem; }
 dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
-.secret { font-family: var(--mono); background: #F3F5F7; border: 1px solid var(--line); border-radius: var(--r); padding: 8px 10px; word-break: break-all; display: flex; justify-content: space-between; gap: 8px; align-items: center; }
+.secret { font-family: var(--mono); background: var(--well); border: 1px solid var(--line); border-radius: var(--r); padding: 9px 12px; word-break: break-all; display: flex; justify-content: space-between; gap: 8px; align-items: center; font-size: .86rem; }
 
-.uploads { position: fixed; right: 20px; bottom: 20px; width: min(360px, calc(100% - 40px)); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 12px 30px rgba(10,30,45,.18); z-index: 30; }
+/* Uploads, toasts */
+.uploads { position: fixed; right: 20px; bottom: 20px; width: min(370px, calc(100% - 40px)); background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); box-shadow: var(--shadow-lg); z-index: 30; overflow: hidden; }
 .uploads header { padding: 10px 14px; border-bottom: 1px solid var(--line); display: flex; justify-content: space-between; align-items: center; font-weight: 600; }
-.uploads ul { list-style: none; margin: 0; padding: 6px 14px 10px; max-height: 240px; overflow: auto; }
-.uploads li { padding: 6px 0; font-size: .88rem; }
-.uploads .bar { height: 4px; background: #E3E8EC; border-radius: 2px; overflow: hidden; margin-top: 4px; }
-.uploads .bar i { display: block; height: 100%; background: var(--steel); width: 0; transition: width .1s linear; }
+.uploads ul { list-style: none; margin: 0; padding: 6px 14px 10px; max-height: 260px; overflow: auto; }
+.uploads li { padding: 7px 0; font-size: .88rem; }
+.uploads .bar { margin-top: 5px; height: 4px; }
 .uploads li.failed .bar i { background: var(--danger); }
 .uploads li.done .bar i { background: var(--ok); }
-.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: #fff; padding: 10px 16px; border-radius: var(--r); z-index: 40; font-size: .92rem; max-width: calc(100% - 40px); }
-.toast.bad { background: var(--danger); }
+.toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); background: var(--ink); color: var(--surface); padding: 11px 18px; border-radius: var(--r); z-index: 40; font-size: .92rem; max-width: calc(100% - 40px); box-shadow: var(--shadow-lg); }
+.toast.bad { background: var(--danger); color: #fff; }
 
-@media (max-width: 820px) {
-  .shell { grid-template-columns: 1fr; }
-  .rail { position: static; height: auto; flex-direction: row; align-items: center; flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
-  .rail .brand { padding: 0 8px 0 0; }
-  .rail nav { display: flex; flex-wrap: wrap; }
-  .rail .who { margin: 0 0 0 auto; border: 0; padding: 0; display: flex; gap: 8px; align-items: center; }
-  .rail .who strong { display: none; }
-  .rail .who .btn { margin: 0; }
-  main { padding: 18px 14px 60px; }
+/* ===== Responsive ===== */
+@media (max-width: 860px) {
+  .login { grid-template-columns: 1fr; }
+  .login-brand { padding: 32px 24px 44px; }
+  .login-brand p { display: none; }
+  .shell { grid-template-columns: minmax(0, 1fr); background: none; }
+  .rail { position: relative; height: auto; padding: 10px 12px; min-width: 0; }
+  .rail .brand { padding: 4px 6px 8px; }
+  .rail .group { display: none; }
+  .rail nav { display: flex; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  .rail nav a { white-space: nowrap; padding: 7px 10px; }
+  .rail nav a[aria-current="page"]::before { left: 10px; right: 10px; top: auto; bottom: 0; width: auto; height: 3px; border-radius: 3px 3px 0 0; }
+  .rail .who { position: absolute; top: 10px; right: 12px; background: none; padding: 0; }
+  .rail .who-text, .rail .avatar { display: none; }
+  main { padding: 20px 14px 72px; }
   .hide-sm { display: none; }
-  .panel thead { display: none; }
-  .panel tbody tr { display: grid; grid-template-columns: auto 1fr auto; align-items: center; border-bottom: 1px solid #EBEEF1; padding: 4px 0; }
-  .panel tbody tr:last-child { border-bottom: 0; }
-  .panel td { border: 0; padding: 4px 10px; }
-  .panel td.name { grid-column: 2 / -1; }
-  .panel td.cb { grid-row: span 2; }
-  .panel td.r { text-align: left; }
-  .row-actions { justify-content: flex-end; flex-wrap: wrap; }
-  .rule, .hook, .target, .grant { grid-template-columns: 1fr 1fr; }
+  .sm-only { display: inline; }
+  .card-head { flex-direction: column; padding: 16px; }
+  .card-body { padding: 0 16px 16px; }
+  .card-foot { padding: 12px 16px; }
+  .card table thead { display: none; }
+  .card tbody tr { display: grid; grid-template-columns: auto 1fr auto; align-items: center; border-bottom: 1px solid var(--line); padding: 4px 0; }
+  .card tbody tr:last-child { border-bottom: 0; }
+  .card td { border: 0; padding: 4px 12px; }
+  .card td.name, .card td.wide { grid-column: 1 / -1; }
+  .card td.cb { grid-row: 1; grid-column: 1; padding-right: 0; }
+  .card td.cb + td.name { grid-row: 1; grid-column: 2 / -1; }
+  .card td.cb ~ td:not(.name) { grid-column: auto; }
+  .card tr:has(td.cb) td:nth-child(3) { grid-column: 2; }
+  .card td.r { text-align: left; white-space: nowrap; }
+  .row-actions { flex-wrap: wrap; }
+  .rule, .hook, .target, .grant, .trio { grid-template-columns: 1fr 1fr; }
+  dl.kv { grid-template-columns: 1fr; gap: 2px 0; }
+  dl.kv dd { margin-bottom: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
 </style>
@@ -210,15 +366,23 @@ dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1
 <dialog id="dlg"><form method="dialog" id="dlg-form"></form></dialog>
 
 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
-  <symbol id="i-box" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9"/></symbol>
-  <symbol id="i-folder" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></symbol>
-  <symbol id="i-file" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M6 3h8l4 4v14H6zM14 3v4h4"/></symbol>
-  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="m11 12 8-8m-3 3 2 2m-4 0 2 2"/></symbol>
-  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.8"/><path stroke="currentColor" stroke-width="1.8" d="M12 11v6M12 7.5v.5"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9"/></symbol>
+  <symbol id="i-folder" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M3 6.5A1.5 1.5 0 0 1 4.5 5H9l2 2.5h8.5A1.5 1.5 0 0 1 21 9v9.5a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18.5z"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M6 3h8l4 4v14H6zM14 3v4h4"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><circle cx="9" cy="10" r="1.6" fill="currentColor"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="m4 17 5-5 4 4 3-3 4 4"/></symbol>
+  <symbol id="i-doc" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M6 3h8l4 4v14H6zM14 3v4h4M9 12h6M9 16h6"/></symbol>
+  <symbol id="i-media" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="currentColor" d="m10 9 5 3-5 3z"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M4 7h16v13H4zM3 4h18v3H3zM10 11h4"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8" cy="15" r="4" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="m11 12 8-8m-3 3 2 2m-4 0 2 2"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6zM9 12l2 2 4-4"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
+  <symbol id="i-disk" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M3 14h18M7 17h.01"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="5" y="10" width="14" height="10" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M8 10V7a4 4 0 0 1 8 0v3"/></symbol>
-  <symbol id="i-list" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M8 6h13M8 12h13M8 18h13M3.5 6h.01M3.5 12h.01M3.5 18h.01"/></symbol>
-  <symbol id="i-shield" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" d="M12 3 4.5 6v5.5c0 4.6 3.2 8.4 7.5 9.5 4.3-1.1 7.5-4.9 7.5-9.5V6zM9 12l2 2 4-4"/></symbol>
-  <symbol id="i-disk" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path fill="none" stroke="currentColor" stroke-width="1.8" d="M3 14h18M7 17h.01"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="m16 16 4.5 4.5"/></symbol>
+  <symbol id="i-upload" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" d="M12 16V4m0 0L7 9m5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path stroke="currentColor" stroke-width="1.8" stroke-linecap="round" d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="m5 12.5 4.5 4.5L19 7.5"/></symbol>
 </svg>
 
 <script>
@@ -240,6 +404,31 @@ function size(n) {
 }
 const when = d => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" }) : "";
 const whenFull = d => d ? new Date(d).toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "medium" }) : "";
+const chip = (text, kind = "") => `<span class="chip ${kind}"><i></i>${esc(text)}</span>`;
+
+/* ---------- building blocks ---------- */
+const pageHead = (title, lead = "", actions = "") =>
+  `<div class="page-head"><div><h1>${title}</h1>${lead ? `<p class="lead">${lead}</p>` : ""}</div>${actions ? `<div class="actions">${actions}</div>` : ""}</div>`;
+function card({ title, desc = "", ctl = "", body = "", flush = false, foot = "", cls = "" }) {
+  return `<section class="card ${cls}">
+    ${title ? `<div class="card-head"><div><h2>${title}</h2>${desc ? `<p class="desc">${desc}</p>` : ""}</div>${ctl ? `<div class="ctl">${ctl}</div>` : ""}</div>` : ""}
+    ${body ? `<div class="card-body${flush ? " flush" : ""}">${body}</div>` : ""}
+    ${foot ? `<div class="card-foot">${foot}</div>` : ""}
+  </section>`;
+}
+const empty = (art, title, text, action = "") => `<div class="empty"><div class="art">${icon(art)}</div><h3>${title}</h3><p>${text}</p>${action}</div>`;
+const sw = (id, on, label, disabled) => `<label class="switch"><input type="checkbox" id="${id}" ${on ? "checked" : ""} ${disabled ? "disabled" : ""}><span>${label}</span></label>`;
+const choice = (name, value, checked, title, text, disabled) =>
+  `<label class="choice"><input type="radio" name="${name}" value="${value}" ${checked ? "checked" : ""} ${disabled ? "disabled" : ""}><b>${title}</b><span>${text}</span></label>`;
+
+function fileIcon(key, type = "") {
+  const t = type.toLowerCase(), k = key.toLowerCase();
+  if (t.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|svg)$/.test(k)) return "image";
+  if (t.startsWith("video/") || t.startsWith("audio/") || /\.(mp4|webm|mov|mp3|ogg|wav)$/.test(k)) return "media";
+  if (/\.(zip|gz|tgz|tar|7z|rar|bz2|xz)$/.test(k)) return "archive";
+  if (t.startsWith("text/") || t === "application/pdf" || /\.(pdf|txt|md|csv|json|docx?|xlsx?)$/.test(k)) return "doc";
+  return "file";
+}
 
 async function api(method, path, body, opts = {}) {
   const init = { method, headers: { "x-boxspace-csrf": "1" }, credentials: "same-origin" };
@@ -293,15 +482,25 @@ function confirmDlg(title, text, ok, danger = true) {
 }
 
 /* ---------- login ---------- */
+const logo = (size, top = "#F2C230", body = "#fff") => `<svg width="${size}" height="${size}" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="19" rx="2.5" fill="${body}"/><rect x="3" y="7" width="26" height="5" rx="1" fill="${top}"/><rect x="8" y="16" width="6" height="2" rx="1" fill="#1E4D6B" opacity=".35"/></svg>`;
+
 function loginView() {
   $("#app").innerHTML = `
-  <div class="login"><form id="login" autocomplete="on">
-    <div class="brand"><svg width="34" height="34" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="19" rx="2" fill="#1E4D6B"/><rect x="3" y="7" width="26" height="5" fill="#F2C230"/></svg><h1>BoxSpace</h1></div>
-    <div class="field"><label for="ak">Access key</label><input id="ak" name="ak" autocomplete="username" required autofocus></div>
-    <div class="field"><label for="sk">Secret key</label><input id="sk" name="sk" type="password" autocomplete="current-password" required></div>
-    <p class="err" id="login-err"></p>
-    <button class="btn primary" style="width:100%;justify-content:center">Entrar</button>
-  </form></div>`;
+  <div class="login">
+    <div class="login-brand">
+      <div class="wordmark">${logo(56)}<span>BoxSpace</span></div>
+      <p>Armazenamento de objetos compatível com S3, no seu próprio servidor.</p>
+      <div class="stripes" aria-hidden="true"></div>
+    </div>
+    <div class="login-form"><form id="login" autocomplete="on">
+      <h1>Entrar</h1>
+      <p class="sub">Use a access key e a secret key do root ou de uma chave de acesso.</p>
+      <div class="field"><label for="ak">Access key</label><input id="ak" name="ak" autocomplete="username" required autofocus></div>
+      <div class="field"><label for="sk">Secret key</label><input id="sk" name="sk" type="password" autocomplete="current-password" required></div>
+      <p class="err" id="login-err"></p>
+      <button class="btn primary" style="width:100%;min-height:42px">Entrar</button>
+    </form></div>
+  </div>`;
   $("#login").onsubmit = async ev => {
     ev.preventDefault();
     const f = new FormData(ev.target);
@@ -317,14 +516,23 @@ function loginView() {
 
 /* ---------- shell ---------- */
 function shell(active, inner) {
-  const nav = [["buckets", "Buckets", "box"],
-    ...(state.me.root ? [["keys", "Chaves de acesso", "key"], ["ips", "Bloqueio de IPs", "shield"], ["audit", "Auditoria", "list"]] : []),
-    ...(state.me.admin ? [["server", "Servidor", "disk"]] : [["about", "Conectar", "info"]])];
+  const me = state.me;
+  const groups = [
+    ["Armazenamento", [["buckets", "Buckets", "box"]]],
+    ...(me.root ? [["Segurança", [["keys", "Chaves de acesso", "key"], ["ips", "Bloqueio de IPs", "shield"], ["audit", "Auditoria", "list"]]]] : []),
+    ["Sistema", me.admin ? [["server", "Servidor", "disk"]] : [["about", "Conectar", "plug"]]],
+  ];
+  const nav = groups.map(([g, items]) => `<div class="group">${g}</div>` +
+    items.map(([id, label, ic]) => `<a href="#/${id}" ${active === id ? 'aria-current="page"' : ""}>${icon(ic)}${label}</a>`).join("")).join("");
   return `<div class="shell">
     <aside class="rail">
-      <div class="brand"><svg width="26" height="26" viewBox="0 0 32 32" aria-hidden="true"><rect x="3" y="7" width="26" height="19" rx="2" fill="#fff"/><rect x="3" y="7" width="26" height="5" fill="#F2C230"/></svg><span>BoxSpace</span></div>
-      <nav>${nav.map(([id, label, ic]) => `<a href="#/${id}" ${active === id ? 'aria-current="page"' : ""}>${icon(ic)}${label}</a>`).join("")}</nav>
-      <div class="who">${state.me.readOnly ? '<span class="tag warn">Somente leitura</span>' : ""}<strong>${esc(state.me.accessKey)}</strong><button class="btn" id="logout">Sair</button></div>
+      <a class="brand" href="#/buckets">${logo(28)}<span>BoxSpace</span></a>
+      <nav aria-label="Principal">${nav}</nav>
+      <div class="who">
+        <div class="avatar" aria-hidden="true">${esc(me.accessKey.slice(0, 1).toUpperCase())}</div>
+        <div class="who-text"><strong>${esc(me.accessKey)}</strong>${me.root ? "root" : me.readOnly ? "somente leitura" : me.admin ? "acesso total" : "acesso por bucket"}</div>
+        <button class="btn" id="logout">Sair</button>
+      </div>
     </aside>
     <main id="main">${inner}</main>
   </div>
@@ -367,25 +575,33 @@ document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeDrawe
 async function bucketsView() {
   const [buckets, info] = await Promise.all([api("GET", "/api/buckets"), api("GET", "/api/info")]);
   const admin = state.me.admin;
+  const total = buckets.reduce((s, b) => s + b.bytes, 0) || 1;
   const rows = buckets.map(b => `<tr>
-      <td class="name"><a href="#/b/${enc(b.name)}">${icon("box")}${esc(b.name)}</a></td>
-      <td class="r num">${b.objects.toLocaleString("pt-BR")}</td>
-      <td class="r num">${size(b.bytes)}</td>
-      <td class="hide-sm">${b.public ? '<span class="tag warn">Público</span>' : ""}${b.versioning === "Enabled" ? '<span class="tag">Versionado</span>' : ""}${b.encryption ? '<span class="tag">Criptografado</span>' : ""}${b.readable ? '<span class="tag good">Arquivos legíveis</span>' : ""}${b.replicated ? '<span class="tag">Replicado</span>' : ""}${b.writable ? "" : '<span class="tag warn">Só leitura</span>'}</td>
-      <td class="hide-sm muted num">${when(b.created)}</td>
+      <td class="name"><a href="#/b/${enc(b.name)}"><span class="ficon">${icon("box")}</span>${esc(b.name)}</a></td>
+      <td class="r num">${b.objects.toLocaleString("pt-BR")}<span class="sm-only faint"> objeto(s), ${size(b.bytes)}</span></td>
+      <td class="hide-sm"><div class="usage"><span class="num small">${size(b.bytes)}</span><div class="bar"><i style="width:${Math.max(b.bytes ? 2 : 0, b.bytes / total * 100)}%"></i></div></div></td>
+      <td class="wide">${b.public ? chip("Público", "warn") : ""}${b.versioning === "Enabled" ? chip("Versionado") : ""}${b.encryption ? chip("Criptografado") : ""}${b.readable ? chip("Arquivos legíveis", "ok") : ""}${b.replicated ? chip("Replicado") : ""}${b.writable ? "" : chip("Só leitura", "plain")}</td>
       <td><div class="row-actions"><a class="btn link" href="#/b/${enc(b.name)}/settings">Configurar</a>${admin ? `<button class="btn link danger" data-del="${esc(b.name)}" data-count="${b.objects}">Excluir</button>` : ""}</div></td>
     </tr>`).join("");
   $("#app").innerHTML = shell("buckets", `
     ${info.defaultCredentials ? '<div class="banner">O servidor está usando as credenciais padrão. Defina <code>BOXSPACE_ROOT_USER</code> e <code>BOXSPACE_ROOT_PASSWORD</code> antes de expor o BoxSpace na rede.</div>' : ""}
-    ${admin && info.disksOnline < info.disks ? `<div class="banner bad">${info.disks - info.disksOnline} de ${info.disks} disco(s) estão offline. <a href="#/server">Ver discos</a></div>` : ""}
-    ${admin && info.lost > 0 ? `<div class="banner bad">A última verificação encontrou ${info.lost} objeto(s) que não podem ser reconstruídos. <a href="#/server">Ver detalhes</a></div>` : ""}
-    <div class="head"><h1>Buckets</h1><div class="actions">${admin ? '<button class="btn primary" id="new-bucket">Criar bucket</button>' : ""}</div></div>
-    <div class="panel">${buckets.length ? `<table><thead><tr><th>Nome</th><th class="r">Objetos</th><th class="r">Tamanho</th><th class="hide-sm">Recursos</th><th class="hide-sm">Criado em</th><th></th></tr></thead><tbody>${rows}</tbody></table>`
-      : `<div class="empty"><h3>Nenhum bucket ${admin ? "ainda" : "disponível para esta chave"}</h3><p>${admin ? "Um bucket guarda seus arquivos. Crie o primeiro para começar a enviar dados." : "Peça ao administrador acesso a um bucket."}</p>${admin ? '<button class="btn primary" id="new-bucket-2">Criar bucket</button>' : ""}</div>`}</div>`);
+    ${admin && info.disksOnline < info.disks ? `<div class="banner bad">${info.disks - info.disksOnline} de ${info.disks} disco(s) estão offline.&nbsp;<a href="#/server">Ver discos</a></div>` : ""}
+    ${admin && info.lost > 0 ? `<div class="banner bad">A última verificação encontrou ${info.lost} objeto(s) que não podem ser reconstruídos.&nbsp;<a href="#/server">Ver detalhes</a></div>` : ""}
+    ${pageHead("Buckets", "Cada bucket guarda um conjunto de arquivos, com suas próprias regras de acesso, versões e cópias.",
+      admin ? `<button class="btn primary" id="new-bucket">${icon("plus")}Criar bucket</button>` : "")}
+    <div class="stats">
+      <div class="stat"><b class="num">${buckets.length}</b><span>buckets</span></div>
+      <div class="stat"><b class="num">${info.objects.toLocaleString("pt-BR")}</b><span>objetos</span></div>
+      <div class="stat"><b class="num">${size(info.bytes)}</b><span>armazenados</span></div>
+    </div>
+    ${card({ flush: true, body: buckets.length
+      ? `<div class="table-wrap"><table><thead><tr><th>Nome</th><th class="r">Objetos</th><th class="hide-sm">Tamanho</th><th>Recursos</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : empty("box", admin ? "Nenhum bucket ainda" : "Nenhum bucket disponível", admin ? "Crie o primeiro bucket para começar a enviar arquivos." : "Peça ao administrador acesso a um bucket.",
+          admin ? `<button class="btn primary" id="new-bucket-2">${icon("plus")}Criar bucket</button>` : "") })}`);
   const create = () => dialog(`<h2>Criar bucket</h2>
       <div class="field"><label for="bn">Nome</label><input id="bn" name="name" required pattern="[a-z0-9][a-z0-9.\\-]{1,61}[a-z0-9]" placeholder="meus-arquivos"></div>
-      <p class="muted small" style="margin-top:-6px">De 3 a 63 caracteres: letras minúsculas, números, pontos e hífens.</p>
-      <label class="check"><input type="checkbox" name="readable"><span><b>Arquivos legíveis no disco</b><br><span class="muted small">Cada arquivo também aparece com o nome real na pasta de dados do servidor, para abrir e copiar sem o BoxSpace. Não pode ser usado com criptografia.</span></span></label>
+      <p class="hint">De 3 a 63 caracteres: letras minúsculas, números, pontos e hífens.</p>
+      <label class="choice" style="padding-left:44px"><input type="checkbox" name="readable"><b>Arquivos legíveis no disco</b><span>Cada arquivo também aparece com o nome real na pasta de dados, para abrir e copiar sem o BoxSpace. Não pode ser usado com criptografia.</span></label>
       ${foot("Criar bucket")}`,
     async f => { await api("POST", "/api/buckets", { name: f.get("name"), readable: f.get("readable") === "on" }); toast("Bucket criado."); location.hash = `#/b/${enc(f.get("name"))}`; });
   $("#new-bucket")?.addEventListener("click", create);
@@ -422,17 +638,17 @@ function rowHtml(bucket, prefix, item, writable, flat) {
     const p = item.prefix;
     return `<tr data-p="${esc(p)}">
       <td class="cb"><input type="checkbox" aria-label="Selecionar ${esc(p)}" data-selp="${esc(p)}"></td>
-      <td class="name"><a href="#/b/${enc(bucket)}?prefix=${enc(p)}">${icon("folder")}${esc(p.slice(prefix.length))}</a></td>
-      <td class="r muted">Pasta</td><td class="hide-sm"></td>
+      <td class="name"><a href="#/b/${enc(bucket)}?prefix=${enc(p)}"><span class="ficon folder">${icon("folder")}</span>${esc(p.slice(prefix.length))}</a></td>
+      <td class="r faint">Pasta</td><td class="hide-sm"></td>
       <td><div class="row-actions">${writable ? `<button class="btn link danger" data-delprefix="${esc(p)}">Excluir</button>` : ""}</div></td></tr>`;
   }
   const o = item;
   const shown = flat ? o.key : o.key.slice(prefix.length);
   return `<tr data-k="${esc(o.key)}">
     <td class="cb"><input type="checkbox" aria-label="Selecionar ${esc(o.key)}" data-selk="${esc(o.key)}"></td>
-    <td class="name"><a href="#" data-info="${esc(o.key)}">${icon("file")}${esc(shown)}</a>${o.encrypted ? ` <span title="Criptografado" class="muted">${icon("lock")}</span>` : ""}</td>
+    <td class="name"><a href="#" data-info="${esc(o.key)}"><span class="ficon">${icon(fileIcon(o.key, o.contentType))}</span>${esc(shown)}</a>${o.encrypted ? ` <span title="Criptografado" class="faint">${icon("lock")}</span>` : ""}</td>
     <td class="r num">${size(o.size)}</td>
-    <td class="hide-sm muted num">${when(o.lastModified)}</td>
+    <td class="hide-sm faint num">${when(o.lastModified)}</td>
     <td><div class="row-actions"><a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(o.key)}">Baixar</a><button class="btn link" data-share="${esc(o.key)}">Compartilhar</button>${writable ? `<button class="btn link danger" data-delkey="${esc(o.key)}">Excluir</button>` : ""}</div></td></tr>`;
 }
 
@@ -441,7 +657,7 @@ function updateBulk(bucket, writable) {
   const bar = $("#bulk");
   if (!bar) return;
   bar.hidden = n === 0;
-  bar.innerHTML = `<b>${n} selecionado(s)</b><button class="btn small" id="bulk-zip">Baixar em ZIP</button>${writable ? '<button class="btn small danger" id="bulk-del">Excluir</button>' : ""}<button class="btn link small" id="bulk-clear">Limpar seleção</button>`;
+  bar.innerHTML = `<b>${n} selecionado(s)</b><button class="btn" id="bulk-zip">Baixar em ZIP</button>${writable ? '<button class="btn danger" id="bulk-del">Excluir</button>' : ""}<button class="btn" id="bulk-clear">Limpar</button>`;
   $$("tr[data-k], tr[data-p]").forEach(tr => tr.classList.toggle("sel", selection.keys.has(tr.dataset.k) || selection.prefixes.has(tr.dataset.p)));
   $("#bulk-clear").onclick = () => { selection.keys.clear(); selection.prefixes.clear(); $$("[data-selk], [data-selp], #sel-all").forEach(c => c.checked = false); updateBulk(bucket, writable); };
   $("#bulk-zip").onclick = async () => {
@@ -479,23 +695,25 @@ async function browserView(bucket, prefix, query, token = "", append = false) {
   if (append) {
     $("#rows").insertAdjacentHTML("beforeend", rowsHtml);
     $(".more")?.remove();
-    $(".panel").insertAdjacentHTML("beforeend", more);
+    $("#drop .card").insertAdjacentHTML("beforeend", more);
   } else {
     selection.keys.clear(); selection.prefixes.clear();
-    const empty = !rowsHtml;
-    const emptyMsg = query ? `<h3>Nada encontrado</h3><p>Nenhum arquivo ${prefix ? "nesta pasta " : ""}tem “${esc(query)}” no nome.</p>`
-      : `<h3>${prefix ? "Esta pasta está vazia" : "Este bucket está vazio"}</h3><p>${writable ? "Arraste arquivos para cá ou use <b>Enviar arquivos</b>." : "Não há arquivos aqui."}</p>`;
+    const emptyHtml = query ? empty("search", "Nada encontrado", `Nenhum arquivo ${prefix ? "nesta pasta " : ""}tem “${esc(query)}” no nome.`)
+      : empty(prefix ? "folder" : "upload", prefix ? "Esta pasta está vazia" : "Este bucket está vazio",
+          writable ? "Arraste arquivos ou pastas para cá, ou use o botão Enviar arquivos." : "Não há arquivos aqui.",
+          writable ? `<label class="btn primary" for="file-input">${icon("upload")}Enviar arquivos</label>` : "");
     $("#app").innerHTML = shell("buckets", `
-      <div class="head">${pathHtml(bucket, prefix)}<div class="actions">${writable ? `<button class="btn" id="new-folder">Nova pasta</button><label class="btn primary" for="file-input">Enviar arquivos</label><input type="file" id="file-input" multiple hidden>` : ""}</div></div>
+      <div class="page-head">${pathHtml(bucket, prefix)}<div class="actions">${writable ? `<button class="btn" id="new-folder">${icon("folder")}Nova pasta</button><label class="btn primary" for="file-input">${icon("upload")}Enviar arquivos</label><input type="file" id="file-input" multiple hidden>` : ""}</div></div>
       ${bucketTabs(bucket, "files")}
-      ${state.bucket.readable ? `<p class="note">Arquivos legíveis no disco em <code>${esc(state.bucket.readablePath)}</code></p>` : ""}
+      ${state.bucket.readable ? `<p class="note">${chip("Arquivos legíveis", "ok")} Também disponíveis em <code>${esc(state.bucket.readablePath)}</code></p>` : ""}
       <div class="toolbar">
-        <form id="search" role="search"><input class="text" name="q" type="search" placeholder="Buscar por nome${prefix ? " nesta pasta" : ""}" value="${esc(query)}" aria-label="Buscar"><button class="btn">Buscar</button></form>
-        ${query ? `<a class="btn link" href="#/b/${enc(bucket)}${prefix ? `?prefix=${enc(prefix)}` : ""}">Limpar busca</a><span class="muted small">${data.objects.length}${data.truncated ? "+" : ""} resultado(s)</span>` : ""}
+        <form id="search" class="search" role="search">${icon("search")}<input class="input" name="q" type="search" placeholder="Buscar por nome${prefix ? " nesta pasta" : ""}" value="${esc(query)}" aria-label="Buscar"></form>
+        ${query ? `<a class="btn ghost" href="#/b/${enc(bucket)}${prefix ? `?prefix=${enc(prefix)}` : ""}">Limpar busca</a><span class="faint small">${data.objects.length}${data.truncated ? "+" : ""} resultado(s)</span>` : ""}
         <div class="bulk" id="bulk" hidden></div>
       </div>
-      <div id="drop"><div class="panel">${empty ? `<div class="empty">${emptyMsg}</div>`
-        : `<table><thead><tr><th class="cb"><input type="checkbox" id="sel-all" aria-label="Selecionar tudo"></th><th>Nome</th><th class="r">Tamanho</th><th class="hide-sm">Modificado em</th><th></th></tr></thead><tbody id="rows">${rowsHtml}</tbody></table>`}${more}</div></div>`);
+      <div id="drop">${card({ flush: true, body: rowsHtml
+        ? `<div class="table-wrap"><table><thead><tr><th class="cb"><input type="checkbox" id="sel-all" aria-label="Selecionar tudo"></th><th>Nome</th><th class="r">Tamanho</th><th class="hide-sm">Modificado em</th><th></th></tr></thead><tbody id="rows">${rowsHtml}</tbody></table></div>${more}`
+        : emptyHtml })}</div>`);
     if (writable) wireUploads(bucket, prefix);
     $("#search").onsubmit = ev => {
       ev.preventDefault();
@@ -533,6 +751,7 @@ async function browserView(bucket, prefix, query, token = "", append = false) {
 }
 
 function wireUploads(bucket, prefix) {
+  if (!$("#file-input")) $("#app").insertAdjacentHTML("beforeend", '<input type="file" id="file-input" multiple hidden>');
   $("#file-input").onchange = ev => { upload(bucket, prefix, [...ev.target.files]); ev.target.value = ""; };
   $("#new-folder").onclick = () => dialog(`<h2>Nova pasta</h2><div class="field"><label for="fn">Nome da pasta</label><input id="fn" name="name" required></div>${foot("Criar pasta", false)}`,
     async f => {
@@ -580,7 +799,7 @@ function upload(bucket, prefix, files) {
     if (!item) return;
     const [name, file] = item;
     const li = document.createElement("li");
-    li.innerHTML = `<div>${esc(name)} <span class="muted num">${size(file.size)}</span></div><div class="bar"><i></i></div>`;
+    li.innerHTML = `<div>${esc(name)} <span class="faint num">${size(file.size)}</span></div><div class="bar"><i style="width:0"></i></div>`;
     list.prepend(li);
     const xhr = new XMLHttpRequest();
     xhr.open("PUT", `/api/buckets/${enc(bucket)}/object?key=${enc(prefix + name)}`);
@@ -602,7 +821,7 @@ function upload(bucket, prefix, files) {
 
 function shareDialog(bucket, key) {
   dialog(`<h2>Compartilhar arquivo</h2>
-    <p class="muted">Gera um link de download que funciona sem login até expirar.</p>
+    <p class="muted" style="margin-bottom:14px">Gera um link de download que funciona sem login até expirar.</p>
     <div class="field"><label for="exp">Validade</label><select id="exp" name="exp">
       <option value="3600">1 hora</option><option value="86400" selected>1 dia</option><option value="604800">7 dias</option></select></div>
     <div id="share-out"></div>${foot("Gerar link", false)}`,
@@ -635,18 +854,18 @@ async function objectDrawer(bucket, key) {
   const meta = Object.entries(o.meta || {});
   const versioned = o.versions.length > 1 || o.versionId !== "null";
   const d = $("#drawer");
-  d.innerHTML = `<header><h2>${esc(key.split("/").pop() || key)}</h2><button class="btn link" id="close-drawer">Fechar</button></header>
+  d.innerHTML = `<header><h2>${esc(key.split("/").pop() || key)}</h2><button class="btn ghost sm" id="close-drawer">Fechar</button></header>
     <div class="body">
       ${previewHtml(bucket, o)}
-      ${kv([["Caminho", esc(key)], ["Tamanho", `<span class="num">${size(o.size)} (${o.size.toLocaleString("pt-BR")} bytes)</span>`], ["Tipo", esc(o.contentType)],
+      <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}">Baixar</a><button class="btn" id="drawer-share">Compartilhar</button></div>
+      ${kv([["Caminho", `<code>${esc(key)}</code>`], ["Tamanho", `<span class="num">${size(o.size)}</span> <span class="faint num">(${o.size.toLocaleString("pt-BR")} bytes)</span>`], ["Tipo", esc(o.contentType)],
             ["Modificado em", when(o.lastModified)], ["ETag", `<code>${esc(o.etag)}</code>`], ["Partes", o.parts ? String(o.parts) : ""],
-            ["Criptografia", o.encrypted ? "AES-256 (SSE-S3)" : "Nenhuma"], ["No disco", o.diskPath ? `<code>${esc(o.diskPath)}</code>` : ""]])}
-      ${meta.length ? `<h3>Metadados</h3>${kv(meta.map(([k, v]) => [k, esc(v)]))}` : ""}
-      ${o.tags.length ? `<h3>Tags</h3><p>${o.tags.map(([k, v]) => `<span class="tag">${esc(k)}=${esc(v)}</span>`).join(" ")}</p>` : ""}
-      <p style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}">Baixar</a><button class="btn" id="drawer-share">Compartilhar</button></p>
-      ${versioned ? `<h3 style="margin-top:22px">Versões</h3><ul class="versions">${o.versions.map(v => `<li>
-          <span><span class="num">${when(v.lastModified)}</span> ${v.isLatest ? '<span class="tag">Atual</span>' : ""}${v.deleteMarker ? '<span class="tag warn">Marcador de exclusão</span>' : ` <span class="muted num">${size(v.size)}</span>`}</span>
-          <span class="row-actions">${v.deleteMarker ? "" : `<a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}&versionId=${enc(v.versionId)}">Baixar</a>`}${writable ? `<button class="btn link danger" data-delver="${esc(v.versionId)}">Apagar</button>` : ""}</span></li>`).join("")}</ul>` : ""}
+            ["Criptografia", o.encrypted ? chip("AES-256 (SSE-S3)") : chip("Nenhuma", "plain")], ["No disco", o.diskPath ? `<code>${esc(o.diskPath)}</code>` : ""]])}
+      ${meta.length ? `<div><h3 style="margin-bottom:8px">Metadados</h3>${kv(meta.map(([k, v]) => [k, esc(v)]))}</div>` : ""}
+      ${o.tags.length ? `<div><h3 style="margin-bottom:8px">Tags</h3><p>${o.tags.map(([k, v]) => chip(`${k} = ${v}`, "plain")).join(" ")}</p></div>` : ""}
+      ${versioned ? `<div><h3 style="margin-bottom:8px">Versões</h3><ul class="versions">${o.versions.map(v => `<li>
+          <span><span class="num">${when(v.lastModified)}</span> ${v.isLatest ? chip("Atual", "ok") : ""}${v.deleteMarker ? chip("Marcador de exclusão", "warn") : ` <span class="faint num">${size(v.size)}</span>`}</span>
+          <span class="row-actions">${v.deleteMarker ? "" : `<a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}&versionId=${enc(v.versionId)}">Baixar</a>`}${writable ? `<button class="btn link danger" data-delver="${esc(v.versionId)}">Apagar</button>` : ""}</span></li>`).join("")}</ul></div>` : ""}
     </div>`;
   d.classList.add("open");
   d.setAttribute("aria-hidden", "false");
@@ -679,7 +898,7 @@ async function settingsView(bucket) {
       <div class="field"><label>Apagar após (dias)</label><input name="expirationDays" type="number" min="1" value="${r.expirationDays ?? ""}" ${dis}></div>
       <div class="field"><label>Versões antigas (dias)</label><input name="noncurrentDays" type="number" min="1" value="${r.noncurrentDays ?? ""}" ${dis}></div>
       <div class="field"><label>Envios incompletos (dias)</label><input name="abortDays" type="number" min="1" value="${r.abortDays ?? ""}" ${dis}></div>
-      <label class="switch" title="Regra ativa"><input type="checkbox" name="enabled" ${r.enabled !== false ? "checked" : ""} ${dis}><span class="small">Ativa</span></label>
+      <label class="switch" title="Regra ativa"><input type="checkbox" name="enabled" ${r.enabled !== false ? "checked" : ""} ${dis}><span>Ativa</span></label>
       ${remove}</div>`;
   const evOpts = [["s3:ObjectCreated:*", "Criação"], ["s3:ObjectRemoved:*", "Exclusão"], ["*", "Todos"]];
   const hookRow = (h = {}) => {
@@ -698,57 +917,45 @@ async function settingsView(bucket) {
       <div class="field"><label>Access key</label><input name="accessKey" value="${esc(t.accessKey || "")}" autocomplete="off" ${dis}></div>
       <div class="field"><label>Secret key</label><input name="secretKey" type="password" placeholder="${t.id ? "mantida" : ""}" autocomplete="new-password" ${dis}></div>
       <div class="opts">
-        <div class="field" style="flex:1;min-width:160px"><label>Somente o prefixo</label><input name="prefix" value="${esc(t.prefix || "")}" placeholder="todo o bucket" ${dis}></div>
-        <label class="switch"><input type="checkbox" name="replicateDeletes" ${t.replicateDeletes ? "checked" : ""} ${dis}><span class="small">Replicar exclusões</span></label>
-        <label class="switch"><input type="checkbox" name="enabled" ${t.enabled !== false ? "checked" : ""} ${dis}><span class="small">Ativo</span></label>
-        ${can ? `<button class="btn small" type="button" data-test>Testar conexão</button>${t.id ? `<button class="btn small" type="button" data-resync="${esc(t.id)}">Reenviar tudo</button>` : ""}${remove}` : ""}
+        <div class="field" style="flex:1;min-width:180px"><label>Somente o prefixo</label><input name="prefix" value="${esc(t.prefix || "")}" placeholder="todo o bucket" ${dis}></div>
+        <label class="switch"><input type="checkbox" name="replicateDeletes" ${t.replicateDeletes ? "checked" : ""} ${dis}><span>Replicar exclusões</span></label>
+        <label class="switch"><input type="checkbox" name="enabled" ${t.enabled !== false ? "checked" : ""} ${dis}><span>Ativo</span></label>
+        ${can ? `<button class="btn sm" type="button" data-test>Testar conexão</button>${t.id ? `<button class="btn sm" type="button" data-resync="${esc(t.id)}">Reenviar tudo</button>` : ""}${remove}` : ""}
         <span class="small" data-result></span>
       </div></div>`;
   const rs = b.replicationStats;
+  const state1 = (on, yes, no) => on ? chip(yes, "ok") : chip(no, "plain");
+  const versionLabel = b.versioning === "Enabled" ? "Ativado" : b.versioning === "Suspended" ? "Suspenso" : "Desativado";
+  const replStatus = b.replication.length ? `${rs.pending ? chip(`${rs.pending} pendente(s)`) : chip("Em dia", "ok")}${rs.failed ? chip(`${rs.failed} com falha`, "bad") : ""}` : "";
 
   $("#app").innerHTML = shell("buckets", `
-    <div class="head">${pathHtml(bucket, "")}</div>
+    <div class="page-head">${pathHtml(bucket, "")}</div>
     ${bucketTabs(bucket, "settings")}
-    ${can ? "" : '<p class="note">Sua chave pode ver estas configurações, mas não alterá-las.</p>'}
-    <section class="section"><h2>Versionamento</h2>
-      <p>Guarda as versões anteriores de cada arquivo quando ele é substituído ou excluído, para que você possa recuperá-las.</p>
-      <label class="switch"><input type="checkbox" id="versioning" ${b.versioning === "Enabled" ? "checked" : ""} ${dis}><span>${b.versioning === "Enabled" ? "Ativado" : b.versioning === "Suspended" ? "Suspenso (as versões existentes continuam guardadas)" : "Desativado"}</span></label>
-    </section>
-    <section class="section"><h2>Arquivos legíveis no disco</h2>
-      <p>Cada arquivo também aparece com o nome real em <code>${esc(b.readablePath)}</code>, para você abrir, copiar ou fazer backup sem o BoxSpace. Esses arquivos são só para leitura: alterações feitas direto no disco não voltam para o bucket.</p>
-      <label class="switch"><input type="checkbox" id="readable" ${b.readable ? "checked" : ""} ${dis}><span>${b.readable ? "Ativado" : "Desativado"}</span></label>
-      ${b.mode === "erasure" ? '<p class="note">No modo erasure coding, os arquivos legíveis são cópias completas e ocupam espaço extra no primeiro disco.</p>' : ""}
-    </section>
-    <section class="section"><h2>Criptografia</h2>
-      <p>Novos arquivos são cifrados no disco com AES-256. Os arquivos já existentes não mudam.${b.readable ? " Para ativar, desligue antes os arquivos legíveis no disco." : ""}</p>
-      <label class="switch"><input type="checkbox" id="encryption" ${b.encryption ? "checked" : ""} ${dis}><span>${b.encryption ? "Ativada para novos arquivos" : "Desativada"}</span></label>
-    </section>
-    <section class="section"><h2>Acesso público</h2>
-      <p>Define quem pode ler os arquivos sem uma chave de acesso.</p>
-      <div class="radios" role="radiogroup">
-        <label><input type="radio" name="mode" value="private" ${mode === "private" ? "checked" : ""} ${dis}><span><b>Privado</b><br><span class="muted small">Só quem tem uma chave de acesso.</span></span></label>
-        <label><input type="radio" name="mode" value="public-read" ${mode === "public-read" ? "checked" : ""} ${dis}><span><b>Leitura pública</b><br><span class="muted small">Qualquer pessoa com o endereço pode baixar e listar os arquivos.</span></span></label>
-        <label><input type="radio" name="mode" value="custom" ${mode === "custom" ? "checked" : ""} ${dis}><span><b>Política personalizada</b><br><span class="muted small">Uma política no formato JSON da AWS.</span></span></label>
-      </div>
-      <div class="field" id="policy-box" ${mode === "custom" ? "" : "hidden"}><label for="policy">Política</label><textarea id="policy" spellcheck="false" ${dis}>${esc(b.policy ? JSON.stringify(JSON.parse(b.policy), null, 2) : "")}</textarea></div>
-      ${can ? '<button class="btn primary" id="save-policy">Salvar acesso</button>' : ""}
-    </section>
-    <section class="section"><h2>Replicação</h2>
-      <p>Copia automaticamente os arquivos novos para outro servidor compatível com S3, como outro BoxSpace, AWS S3 ou Backblaze B2. Ao adicionar um destino, os arquivos que já existem também são enviados.</p>
-      ${b.replication.length ? `<p class="small">${rs.pending ? `<span class="tag">${rs.pending} pendente(s)</span>` : '<span class="tag good">Em dia</span>'}${rs.failed ? ` <span class="tag bad">${rs.failed} com falha</span> ${can ? '<button class="btn link small" id="repl-retry">Tentar de novo</button>' : ""}` : ""}${rs.lastError ? ` <span class="muted">Último erro: ${esc(rs.lastError)}</span>` : ""}</p>` : ""}
-      <div class="grid-rows" id="targets">${b.replication.map(targetRow).join("")}</div>
-      ${can ? '<button class="btn" id="add-target">Adicionar destino</button> <button class="btn primary" id="save-targets">Salvar replicação</button>' : ""}
-    </section>
-    <section class="section"><h2>Limpeza automática</h2>
-      <p>Apaga arquivos depois de um número de dias. A verificação roda a cada hora.</p>
-      <div class="grid-rows" id="rules">${b.lifecycle.map(ruleRow).join("")}</div>
-      ${can ? '<button class="btn" id="add-rule">Adicionar regra</button> <button class="btn primary" id="save-rules">Salvar regras</button>' : ""}
-    </section>
-    <section class="section"><h2>Notificações</h2>
-      <p>Envia um POST em JSON para uma URL sempre que arquivos são criados ou excluídos.</p>
-      <div class="grid-rows" id="hooks">${b.webhooks.map(hookRow).join("")}</div>
-      ${can ? '<button class="btn" id="add-hook">Adicionar destino</button> <button class="btn primary" id="save-hooks">Salvar notificações</button>' : ""}
-    </section>`);
+    ${can ? "" : '<div class="banner">Sua chave pode ver estas configurações, mas não alterá-las.</div>'}
+    ${card({ title: "Versionamento", desc: "Guarda as versões anteriores de cada arquivo quando ele é substituído ou excluído, para que você possa recuperá-las." + (b.versioning === "Suspended" ? " As versões existentes continuam guardadas." : ""),
+      ctl: sw("versioning", b.versioning === "Enabled", versionLabel, !can) })}
+    ${card({ title: "Arquivos legíveis no disco", desc: `Cada arquivo também aparece com o nome real em <code>${esc(b.readablePath)}</code>, para abrir, copiar ou fazer backup sem o BoxSpace. São só para leitura: alterações feitas direto no disco não voltam para o bucket.${b.mode === "erasure" ? " No modo erasure coding, eles são cópias completas e ocupam espaço extra no primeiro disco." : ""}`,
+      ctl: sw("readable", b.readable, b.readable ? "Ativado" : "Desativado", !can) })}
+    ${card({ title: "Criptografia", desc: "Novos arquivos são cifrados no disco com AES-256. Os arquivos já existentes não mudam." + (b.readable ? " Para ativar, desligue antes os arquivos legíveis no disco." : ""),
+      ctl: sw("encryption", b.encryption, b.encryption ? "Ativada" : "Desativada", !can) })}
+    ${card({ title: "Acesso público", desc: "Define quem pode ler os arquivos sem uma chave de acesso.", ctl: state1(mode !== "private", mode === "public-read" ? "Leitura pública" : "Política personalizada", "Privado"),
+      body: `<div class="choices">
+          ${choice("mode", "private", mode === "private", "Privado", "Só quem tem uma chave de acesso.", !can)}
+          ${choice("mode", "public-read", mode === "public-read", "Leitura pública", "Qualquer pessoa com o endereço pode baixar e listar os arquivos.", !can)}
+          ${choice("mode", "custom", mode === "custom", "Política personalizada", "Uma política no formato JSON da AWS.", !can)}
+        </div>
+        <div class="field" id="policy-box" style="margin:14px 0 0" ${mode === "custom" ? "" : "hidden"}><label for="policy">Política</label><textarea id="policy" spellcheck="false" ${dis}>${esc(b.policy ? JSON.stringify(JSON.parse(b.policy), null, 2) : "")}</textarea></div>`,
+      foot: can ? '<button class="btn primary" id="save-policy">Salvar acesso</button>' : "" })}
+    ${card({ title: "Replicação", desc: "Copia automaticamente os arquivos novos para outro servidor compatível com S3, como outro BoxSpace, AWS S3 ou Backblaze B2. Ao adicionar um destino, os arquivos que já existem também são enviados.",
+      ctl: replStatus,
+      body: `${rs.lastError ? `<p class="small" style="margin-bottom:10px;color:var(--danger)">Último erro: ${esc(rs.lastError)}</p>` : ""}<div class="grid-rows" id="targets">${b.replication.map(targetRow).join("")}</div>${b.replication.length ? "" : '<p class="faint small" id="no-targets">Nenhum destino configurado.</p>'}`,
+      foot: can ? `${rs.failed ? '<button class="btn left" id="repl-retry">Tentar de novo as falhas</button>' : ""}<button class="btn" id="add-target">${icon("plus")}Adicionar destino</button><button class="btn primary" id="save-targets">Salvar replicação</button>` : "" })}
+    ${card({ title: "Limpeza automática", desc: "Apaga arquivos depois de um número de dias. A verificação roda a cada hora.",
+      body: `<div class="grid-rows" id="rules">${b.lifecycle.map(ruleRow).join("")}</div>${b.lifecycle.length ? "" : '<p class="faint small">Nenhuma regra.</p>'}`,
+      foot: can ? `<button class="btn" id="add-rule">${icon("plus")}Adicionar regra</button><button class="btn primary" id="save-rules">Salvar regras</button>` : "" })}
+    ${card({ title: "Notificações", desc: "Envia um POST em JSON para uma URL sempre que arquivos são criados ou excluídos.",
+      body: `<div class="grid-rows" id="hooks">${b.webhooks.map(hookRow).join("")}</div>${b.webhooks.length ? "" : '<p class="faint small">Nenhum destino.</p>'}`,
+      foot: can ? `<button class="btn" id="add-hook">${icon("plus")}Adicionar destino</button><button class="btn primary" id="save-hooks">Salvar notificações</button>` : "" })}`);
   if (!can) return;
   const bp = `/api/buckets/${enc(bucket)}`;
   const toggle = (id, path, on, off) => $(id).onchange = async ev => {
@@ -776,11 +983,11 @@ async function settingsView(bucket) {
     $$("[data-remove]", root).forEach(x => x.onclick = () => x.closest(".row-box").remove());
     $$("[data-test]", root).forEach(x => x.onclick = async () => {
       const row = x.closest(".row-box"), out = $("[data-result]", row);
-      out.textContent = "Testando…";
+      out.innerHTML = chip("Testando…", "plain");
       try {
         const r = await api("POST", `${bp}/replication/test`, targetData(row));
-        out.innerHTML = r.ok ? '<span class="tag good">Conexão OK</span>' : `<span class="tag bad">${esc(r.error)}</span>`;
-      } catch (e) { out.innerHTML = `<span class="tag bad">${esc(e.message)}</span>`; }
+        out.innerHTML = r.ok ? chip("Conexão OK", "ok") : chip(r.error, "bad");
+      } catch (e) { out.innerHTML = chip(e.message, "bad"); }
     });
     $$("[data-resync]", root).forEach(x => x.onclick = async () => {
       try { const r = await api("POST", `${bp}/replication/${enc(x.dataset.resync)}/resync`); toast(`${r.queued} arquivo(s) na fila de envio.`); } catch (e) { fail(e); }
@@ -793,7 +1000,7 @@ async function settingsView(bucket) {
       accessKey: v("accessKey").value.trim(), secretKey: v("secretKey").value, prefix: v("prefix").value,
       replicateDeletes: v("replicateDeletes").checked, enabled: v("enabled").checked };
   };
-  const add = (sel, html) => { $(sel).insertAdjacentHTML("beforeend", html); wire($(sel).lastElementChild); };
+  const add = (sel, html) => { const box = $(sel); box.nextElementSibling?.matches("p.faint") && box.nextElementSibling.remove(); box.insertAdjacentHTML("beforeend", html); wire(box.lastElementChild); };
   $("#add-rule").onclick = () => add("#rules", ruleRow());
   $("#add-hook").onclick = () => add("#hooks", hookRow());
   $("#add-target").onclick = () => add("#targets", targetRow());
@@ -818,8 +1025,8 @@ async function settingsView(bucket) {
 
 /* ---------- keys ---------- */
 function grantSummary(k) {
-  if (!k.grants?.length) return k.readOnly ? '<span class="tag warn">Todos os buckets, só leitura</span>' : '<span class="tag">Todos os buckets</span>';
-  return k.grants.map(g => `<span class="tag ${g.write && !k.readOnly ? "" : "warn"}">${esc(g.bucket)} ${g.write && !k.readOnly ? "(leitura e escrita)" : "(leitura)"}</span>`).join(" ");
+  if (!k.grants?.length) return k.readOnly ? chip("Todos os buckets, só leitura", "warn") : chip("Todos os buckets");
+  return k.grants.map(g => chip(`${g.bucket} ${g.write && !k.readOnly ? "(leitura e escrita)" : "(leitura)"}`, g.write && !k.readOnly ? "" : "warn")).join(" ");
 }
 
 function keyForm(k = {}) {
@@ -830,13 +1037,14 @@ function keyForm(k = {}) {
       <button class="btn link danger" type="button" data-remove>Remover</button></div>`;
   return {
     html: `<div class="field"><label for="desc">Descrição</label><input id="desc" name="description" value="${esc(k.description || "")}" placeholder="backup do servidor web"></div>
-      <div class="radios" role="radiogroup" style="margin-top:4px">
-        <label><input type="radio" name="scope" value="all" ${specific ? "" : "checked"}><span><b>Todos os buckets</b><br><span class="muted small">Pode criar buckets e mudar configurações, se não for somente leitura.</span></span></label>
-        <label><input type="radio" name="scope" value="some" ${specific ? "checked" : ""}><span><b>Buckets específicos</b><br><span class="muted small">Acesso só aos buckets listados. Não cria buckets nem muda configurações.</span></span></label>
+      <p class="label" style="margin-bottom:6px">Alcance</p>
+      <div class="choices" style="margin-bottom:14px">
+        ${choice("scope", "all", !specific, "Todos os buckets", "Pode criar buckets e mudar configurações, se não for somente leitura.")}
+        ${choice("scope", "some", specific, "Buckets específicos", "Acesso só aos buckets listados, sem criar buckets nem mudar configurações.")}
       </div>
       <label class="check" id="ro-box" ${specific ? "hidden" : ""}><input type="checkbox" name="readOnly" ${k.readOnly ? "checked" : ""}><span>Somente leitura</span></label>
-      <div id="grants-box" ${specific ? "" : "hidden"}><div class="grid-rows" id="grants">${(k.grants?.length ? k.grants : [{}]).map(grantRow).join("")}</div>
-      <button class="btn small" type="button" id="add-grant">Adicionar bucket</button></div>`,
+      <div id="grants-box" ${specific ? "" : "hidden"}><div class="grid-rows" id="grants" style="margin-bottom:10px">${(k.grants?.length ? k.grants : [{}]).map(grantRow).join("")}</div>
+      <button class="btn sm" type="button" id="add-grant">${icon("plus")}Adicionar bucket</button></div>`,
     wire: f => {
       const sync = () => { const some = $('[name="scope"]:checked', f).value === "some"; $("#grants-box", f).hidden = !some; $("#ro-box", f).hidden = some; };
       $$('[name="scope"]', f).forEach(r => r.onchange = sync);
@@ -856,17 +1064,17 @@ function keyForm(k = {}) {
 async function keysView() {
   const keys = await api("GET", "/api/keys");
   $("#app").innerHTML = shell("keys", `
-    <div class="head"><h1>Chaves de acesso</h1><div class="actions"><button class="btn primary" id="new-key">Criar chave</button></div></div>
-    <p class="muted" style="max-width:72ch">Use uma chave por aplicação, em vez das credenciais root, e dê a cada uma só os buckets de que ela precisa.</p>
-    <div class="panel">${keys.length ? `<table><thead><tr><th>Access key</th><th>Descrição</th><th>Permissões</th><th class="hide-sm">Criada em</th><th></th></tr></thead><tbody>
-      ${keys.map(k => `<tr><td><code>${esc(k.accessKey)}</code></td><td>${esc(k.description)}</td><td>${grantSummary(k)}</td><td class="hide-sm muted num">${when(k.created)}</td>
-        <td><div class="row-actions"><button class="btn link" data-edit="${esc(k.accessKey)}">Editar</button><button class="btn link danger" data-revoke="${esc(k.accessKey)}">Revogar</button></div></td></tr>`).join("")}</tbody></table>`
-      : `<div class="empty"><h3>Nenhuma chave criada</h3><p>As aplicações estão usando as credenciais root. Crie uma chave para cada uma.</p></div>`}</div>`);
+    ${pageHead("Chaves de acesso", "Use uma chave por aplicação, em vez das credenciais root, e dê a cada uma só os buckets de que ela precisa.",
+      `<button class="btn primary" id="new-key">${icon("plus")}Criar chave</button>`)}
+    ${card({ flush: true, body: keys.length ? `<div class="table-wrap"><table><thead><tr><th>Access key</th><th>Descrição</th><th>Permissões</th><th class="hide-sm">Criada em</th><th></th></tr></thead><tbody>
+      ${keys.map(k => `<tr><td class="wide"><span class="mono">${esc(k.accessKey)}</span></td><td>${esc(k.description) || '<span class="faint">sem descrição</span>'}</td><td class="wide">${grantSummary(k)}</td><td class="hide-sm faint num">${when(k.created)}</td>
+        <td><div class="row-actions"><button class="btn link" data-edit="${esc(k.accessKey)}">Editar</button><button class="btn link danger" data-revoke="${esc(k.accessKey)}">Revogar</button></div></td></tr>`).join("")}</tbody></table></div>`
+      : empty("key", "Nenhuma chave criada", "As aplicações estão usando as credenciais root. Crie uma chave para cada uma.") })}`);
   $("#new-key").onclick = async () => {
     const form = keyForm();
     const r = await dialog(`<h2>Criar chave de acesso</h2>${form.html}${foot("Criar chave", false)}`, (fd, f) => api("POST", "/api/keys", form.read(fd, f)), form.wire);
     if (!r) return;
-    const shown = dialog(`<h2>Chave criada</h2><p class="muted">Copie a secret key agora. Ela não será mostrada de novo.</p>
+    const shown = dialog(`<h2>Chave criada</h2><p class="muted" style="margin-bottom:14px">Copie a secret key agora. Ela não será mostrada de novo.</p>
       <div class="field"><label>Access key</label><div class="secret"><span>${esc(r.accessKey)}</span></div></div>
       <div class="field"><label>Secret key</label><div class="secret"><span>${esc(r.secretKey)}</span><button type="button" class="btn link" id="copy-sk">Copiar</button></div></div>
       <div class="foot"><button class="btn primary" value="ok">Já copiei</button></div>`);
@@ -877,7 +1085,7 @@ async function keysView() {
   $$("[data-edit]").forEach(b => b.onclick = async () => {
     const k = keys.find(x => x.accessKey === b.dataset.edit);
     const form = keyForm(k);
-    const r = await dialog(`<h2>Editar <code>${esc(k.accessKey)}</code></h2>${form.html}${foot("Salvar", false)}`, (fd, f) => api("PUT", `/api/keys/${enc(k.accessKey)}`, form.read(fd, f)), form.wire);
+    const r = await dialog(`<h2>Editar chave</h2><p class="mono faint" style="margin:-8px 0 14px">${esc(k.accessKey)}</p>${form.html}${foot("Salvar", false)}`, (fd, f) => api("PUT", `/api/keys/${enc(k.accessKey)}`, form.read(fd, f)), form.wire);
     if (r) { toast("Permissões salvas."); render(); }
   });
   $$("[data-revoke]").forEach(b => b.onclick = async () => {
@@ -893,26 +1101,26 @@ async function auditView(q) {
   if (q.get("errors")) params.set("errors", "1");
   const r = await api("GET", `/api/audit?${params}`);
   const rows = r.entries.map(e => `<tr>
-      <td class="num muted">${whenFull(e.time)}</td>
-      <td>${e.accessKey ? `<code>${esc(e.accessKey)}</code>` : '<span class="muted">anônimo</span>'}</td>
-      <td>${esc(e.op)}${e.source === "console" ? ' <span class="tag">console</span>' : ""}</td>
-      <td class="name">${esc(e.bucket || "")}${e.key ? `<span class="muted">/${esc(e.key)}</span>` : ""}</td>
-      <td><span class="tag ${e.status >= 400 ? "bad" : "good"}">${e.status}</span>${e.error ? ` <span class="small muted">${esc(e.error)}</span>` : ""}</td>
-      <td class="hide-sm muted">${esc(e.remote)}</td>
-      <td class="hide-sm r num muted">${e.durationMs} ms</td></tr>`).join("");
+      <td class="faint num" style="white-space:nowrap">${whenFull(e.time)}</td>
+      <td>${e.accessKey ? `<span class="mono">${esc(e.accessKey)}</span>` : '<span class="faint">anônimo</span>'}</td>
+      <td>${esc(e.op)}${e.source === "console" ? " " + chip("console", "plain") : ""}</td>
+      <td class="name">${esc(e.bucket || "")}${e.key ? `<span class="faint">/${esc(e.key)}</span>` : ""}</td>
+      <td>${chip(String(e.status), e.status >= 400 ? "bad" : "ok")}${e.error ? ` <span class="small faint">${esc(e.error)}</span>` : ""}</td>
+      <td class="hide-sm faint mono">${esc(e.remote)}</td>
+      <td class="hide-sm r num faint">${e.durationMs} ms</td></tr>`).join("");
   $("#app").innerHTML = shell("audit", `
-    <div class="head"><h1>Auditoria</h1></div>
-    ${r.enabled ? "" : '<div class="banner">O log de auditoria está desligado (BOXSPACE_AUDIT=0).</div>'}
+    ${pageHead("Auditoria", "Quem fez o quê, quando e de onde: cada requisição à API, cada ação no console e cada tentativa de login.")}
+    ${r.enabled ? "" : '<div class="banner">O log de auditoria está desligado (<code>BOXSPACE_AUDIT=0</code>).</div>'}
     <form class="toolbar" id="afilter">
-      <input class="text" name="key" placeholder="Access key" value="${esc(q.get("key") || "")}" style="max-width:200px">
-      <input class="text" name="bucket" placeholder="Bucket" value="${esc(q.get("bucket") || "")}" style="max-width:180px">
-      <input class="text" name="op" placeholder="Operação (ex.: DeleteObject)" value="${esc(q.get("op") || "")}" style="max-width:240px">
-      <label class="check" style="margin:0"><input type="checkbox" name="errors" ${q.get("errors") ? "checked" : ""}><span>Só erros</span></label>
+      <input class="input" name="key" placeholder="Access key" value="${esc(q.get("key") || "")}" style="max-width:190px">
+      <input class="input" name="bucket" placeholder="Bucket" value="${esc(q.get("bucket") || "")}" style="max-width:170px">
+      <input class="input" name="op" placeholder="Operação, ex.: DeleteObject" value="${esc(q.get("op") || "")}" style="max-width:240px">
+      <label class="switch"><input type="checkbox" name="errors" ${q.get("errors") ? "checked" : ""}><span>Só erros</span></label>
       <button class="btn">Filtrar</button>
     </form>
-    <div class="panel">${r.entries.length ? `<table><thead><tr><th>Quando</th><th>Chave</th><th>Operação</th><th>Alvo</th><th>Resultado</th><th class="hide-sm">IP</th><th class="hide-sm r">Duração</th></tr></thead><tbody>${rows}</tbody></table>`
-      : '<div class="empty"><h3>Nenhum registro</h3><p>Nada corresponde a estes filtros nos últimos 7 dias.</p></div>'}</div>
-    <p class="note">Mostrando até 200 registros mais recentes dos últimos 7 dias. Os arquivos completos ficam em <code>.boxspace/audit/</code> no primeiro disco.</p>`);
+    ${card({ flush: true, body: r.entries.length ? `<div class="table-wrap"><table><thead><tr><th>Quando</th><th>Chave</th><th>Operação</th><th>Alvo</th><th>Resultado</th><th class="hide-sm">IP</th><th class="hide-sm r">Duração</th></tr></thead><tbody>${rows}</tbody></table></div>`
+      : empty("list", "Nenhum registro", "Nada corresponde a estes filtros nos últimos 7 dias."),
+      foot: `<span class="left faint small">Até 200 registros mais recentes dos últimos 7 dias. Os arquivos completos ficam em <code>.boxspace/audit/</code> no primeiro disco.</span>` })}`);
   $("#afilter").onsubmit = ev => {
     ev.preventDefault();
     const f = new FormData(ev.target), p = new URLSearchParams();
@@ -932,50 +1140,48 @@ async function ipView() {
     try { await api("PUT", "/api/ipfilter", next); toast(msg); render(); return true; } catch (e) { fail(e); return false; }
   };
   const rules = cfg.rules.map((x, i) => `<tr>
-      <td><code>${esc(x.cidr)}</code></td>
-      <td>${x.action === "allow" ? '<span class="tag good">Permitir</span>' : '<span class="tag bad">Bloquear</span>'}</td>
+      <td class="wide"><span class="mono">${esc(x.cidr)}</span></td>
+      <td>${x.action === "allow" ? chip("Permitir", "ok") : chip("Bloquear", "bad")}</td>
       <td>${esc(scopeLabel[x.scope] || x.scope)}</td>
-      <td class="hide-sm muted num">${x.expires ? `até ${when(x.expires)}` : "Permanente"}</td>
-      <td class="hide-sm">${esc(x.note)}</td>
+      <td class="hide-sm faint num">${x.expires ? `até ${when(x.expires)}` : "Permanente"}</td>
+      <td class="hide-sm">${esc(x.note) || '<span class="faint">sem observação</span>'}</td>
       <td><div class="row-actions"><button class="btn link danger" data-rm="${i}">Remover</button></div></td></tr>`).join("");
   const bans = r.bans.map(b => `<tr>
-      <td><code>${esc(b.ip)}</code></td>
-      <td class="muted num">${whenFull(b.since)}</td>
-      <td class="muted num">${whenFull(b.until)}</td>
+      <td class="wide"><span class="mono">${esc(b.ip)}</span></td>
+      <td class="faint num">${whenFull(b.since)}</td>
+      <td class="faint num">${whenFull(b.until)}</td>
       <td class="r num">${b.failures}</td>
       <td><div class="row-actions"><button class="btn link" data-unban="${esc(b.ip)}">Desbloquear</button><button class="btn link danger" data-perm="${esc(b.ip)}">Bloquear de vez</button></div></td></tr>`).join("");
   $("#app").innerHTML = shell("ips", `
-    <div class="head"><h1>Bloqueio de IPs</h1></div>
     ${r.disabled ? '<div class="banner bad">O filtro está desligado por <code>BOXSPACE_IP_FILTER=off</code>. As regras abaixo estão salvas, mas não são aplicadas.</div>' : ""}
-    <p class="muted" style="max-width:72ch">Seu endereço é <code>${esc(r.yourIp)}</code>. O próprio servidor (localhost) nunca é bloqueado.${r.trustProxy ? "" : " Se o BoxSpace estiver atrás de um proxy reverso, defina <code>BOXSPACE_TRUST_PROXY=1</code> para que os clientes sejam identificados pelo IP real."}</p>
-    <section class="section"><h2>Modo</h2>
-      <div class="radios" role="radiogroup">
-        <label><input type="radio" name="ipmode" value="blocklist" ${cfg.mode === "blocklist" ? "checked" : ""}><span><b>Bloquear os IPs da lista</b><br><span class="muted small">Todos podem acessar, menos os endereços com regra de bloqueio.</span></span></label>
-        <label><input type="radio" name="ipmode" value="allowlist" ${cfg.mode === "allowlist" ? "checked" : ""}><span><b>Permitir só os IPs da lista</b><br><span class="muted small">Só os endereços com regra de permissão podem acessar. Crie antes uma regra para o seu endereço.</span></span></label>
-      </div>
-      <button class="btn primary" id="save-mode">Salvar modo</button>
-    </section>
-    <section class="section"><h2>Regras</h2>
-      <p>Endereços ou faixas no formato CIDR, como <code>203.0.113.7</code>, <code>10.0.0.0/8</code> ou <code>2001:db8::/32</code>. Uma regra de permissão vale mais que uma de bloqueio e livra o endereço do bloqueio automático.</p>
-      <div class="panel">${cfg.rules.length ? `<table><thead><tr><th>Endereço</th><th>Ação</th><th>Onde</th><th class="hide-sm">Validade</th><th class="hide-sm">Observação</th><th></th></tr></thead><tbody>${rules}</tbody></table>`
-        : '<div class="empty"><h3>Nenhuma regra</h3><p>Adicione uma regra para bloquear ou permitir um endereço.</p></div>'}</div>
-      <p><button class="btn" id="add-rule">Adicionar regra</button></p>
-    </section>
-    <section class="section"><h2>Bloqueio automático</h2>
-      <p>Bloqueia por um tempo os endereços que erram a autenticação várias vezes seguidas, tanto na API S3 quanto no login do console.</p>
-      <label class="switch" style="margin-bottom:12px"><input type="checkbox" id="auto-on" ${cfg.auto.enabled ? "checked" : ""}><span>${cfg.auto.enabled ? "Ativado" : "Desativado"}</span></label>
-      <div class="row-box grant" style="grid-template-columns:repeat(3,1fr);margin-bottom:12px">
+    ${pageHead("Bloqueio de IPs", `Controle quais endereços podem acessar a API e o console. Seu endereço é <code>${esc(r.yourIp)}</code>; o próprio servidor (localhost) nunca é bloqueado.${r.trustProxy ? "" : " Atrás de um proxy reverso, defina <code>BOXSPACE_TRUST_PROXY=1</code> para ver o IP real dos clientes."}`)}
+    <div class="stats">
+      <div class="stat"><b class="num">${cfg.rules.length}</b><span>regra(s)</span></div>
+      <div class="stat"><b class="num">${r.bans.length}</b><span>bloqueado(s) agora</span></div>
+      <div class="stat"><b class="num">${(r.blockedTotal || 0).toLocaleString("pt-BR")}</b><span>requisições recusadas desde o início</span></div>
+    </div>
+    ${card({ title: "Modo", desc: "Escolha se a lista de regras serve para barrar alguns endereços ou para liberar só alguns.",
+      body: `<div class="choices">
+        ${choice("ipmode", "blocklist", cfg.mode === "blocklist", "Bloquear os IPs da lista", "Todos podem acessar, menos os endereços com regra de bloqueio.")}
+        ${choice("ipmode", "allowlist", cfg.mode === "allowlist", "Permitir só os IPs da lista", "Só os endereços com regra de permissão entram. Crie antes uma regra para o seu endereço.")}
+      </div>`,
+      foot: '<button class="btn primary" id="save-mode">Salvar modo</button>' })}
+    ${card({ title: "Regras", desc: "Endereços ou faixas no formato CIDR, como <code>203.0.113.7</code>, <code>10.0.0.0/8</code> ou <code>2001:db8::/32</code>. Uma regra de permissão vale mais que uma de bloqueio e livra o endereço do bloqueio automático.",
+      ctl: `<button class="btn primary" id="add-rule">${icon("plus")}Adicionar regra</button>`,
+      flush: true, body: cfg.rules.length ? `<div class="table-wrap"><table><thead><tr><th>Endereço</th><th>Ação</th><th>Onde</th><th class="hide-sm">Validade</th><th class="hide-sm">Observação</th><th></th></tr></thead><tbody>${rules}</tbody></table></div>`
+        : empty("shield", "Nenhuma regra", "Adicione uma regra para bloquear ou permitir um endereço ou uma faixa.") })}
+    ${card({ title: "Bloqueio automático", desc: "Bloqueia por um tempo os endereços que erram a autenticação várias vezes seguidas, tanto na API S3 quanto no login do console.",
+      ctl: sw("auto-on", cfg.auto.enabled, cfg.auto.enabled ? "Ativado" : "Desativado"),
+      body: `<div class="row-box trio">
         <div class="field"><label for="auto-max">Tentativas erradas</label><input id="auto-max" type="number" min="1" value="${cfg.auto.maxFailures}"></div>
         <div class="field"><label for="auto-win">Dentro de (minutos)</label><input id="auto-win" type="number" min="1" value="${Math.round(cfg.auto.windowSecs / 60)}"></div>
         <div class="field"><label for="auto-ban">Bloquear por (minutos)</label><input id="auto-ban" type="number" min="1" value="${Math.round(cfg.auto.banSecs / 60)}"></div>
-      </div>
-      <button class="btn primary" id="save-auto">Salvar bloqueio automático</button>
-    </section>
-    <section class="section"><h2>Bloqueados agora</h2>
-      <p>Endereços bloqueados automaticamente. Esses bloqueios terminam sozinhos e também ao reiniciar o servidor. ${r.blockedTotal ? `${r.blockedTotal.toLocaleString("pt-BR")} requisição(ões) recusada(s) desde que o servidor iniciou.` : ""}</p>
-      <div class="panel">${r.bans.length ? `<table><thead><tr><th>Endereço</th><th>Desde</th><th>Até</th><th class="r">Falhas</th><th></th></tr></thead><tbody>${bans}</tbody></table>`
-        : '<div class="empty"><h3>Nenhum endereço bloqueado</h3><p>Quando alguém errar a autenticação muitas vezes, o endereço aparece aqui.</p></div>'}</div>
-    </section>`);
+      </div>`,
+      foot: '<button class="btn primary" id="save-auto">Salvar bloqueio automático</button>' })}
+    ${card({ title: "Bloqueados agora", desc: "Endereços bloqueados automaticamente. Esses bloqueios terminam sozinhos e também ao reiniciar o servidor.",
+      ctl: r.bans.length ? chip(`${r.bans.length} ativo(s)`, "bad") : chip("Nenhum", "ok"),
+      flush: true, body: r.bans.length ? `<div class="table-wrap"><table><thead><tr><th>Endereço</th><th>Desde</th><th>Até</th><th class="r">Falhas</th><th></th></tr></thead><tbody>${bans}</tbody></table></div>`
+        : empty("check", "Nenhum endereço bloqueado", "Quando alguém errar a autenticação muitas vezes, o endereço aparece aqui.") })}`);
   $("#save-mode").onclick = async () => {
     const mode = $('[name="ipmode"]:checked').value;
     if (mode === "allowlist" && !await confirmDlg("Permitir só a lista", "Qualquer endereço sem regra de permissão perderá o acesso imediatamente, inclusive aplicações que usam a API.", "Ativar lista de permissão")) return;
@@ -996,7 +1202,11 @@ async function ipView() {
   });
   $("#add-rule").onclick = () => dialog(`<h2>Adicionar regra</h2>
       <div class="field"><label for="rc">Endereço ou faixa</label><input id="rc" name="cidr" required placeholder="203.0.113.0/24"></div>
-      <div class="field"><label for="ra">Ação</label><select id="ra" name="action"><option value="block">Bloquear</option><option value="allow">Permitir</option></select></div>
+      <p class="label" style="margin-bottom:6px">Ação</p>
+      <div class="choices" style="margin-bottom:14px">
+        ${choice("action", "block", true, "Bloquear", "Recusa o acesso deste endereço.")}
+        ${choice("action", "allow", false, "Permitir", "Libera sempre, mesmo após erros de senha.")}
+      </div>
       <div class="field"><label for="rs">Onde</label><select id="rs" name="scope"><option value="all">API e console</option><option value="api">Só API</option><option value="console">Só console</option></select></div>
       <div class="field"><label for="rv">Validade</label><select id="rv" name="ttl"><option value="">Permanente</option><option value="3600">1 hora</option><option value="86400">1 dia</option><option value="604800">7 dias</option><option value="2592000">30 dias</option></select></div>
       <div class="field"><label for="rn">Observação</label><input id="rn" name="note" placeholder="opcional"></div>
@@ -1016,58 +1226,66 @@ function modeText(s) {
   if (s.mode === "single") return "Um disco, sem redundância. Se o disco falhar, os dados se perdem; use replicação ou backups.";
   if (s.mode === "mirror") return `Espelhamento: cada arquivo é gravado em todos os ${n} discos. Os dados continuam disponíveis com até ${n - 1} disco(s) perdido(s).`;
   const pct = Math.round(s.parity / n * 100);
-  return `Erasure coding: cada arquivo é dividido em ${s.dataShards} fragmentos de dados e ${s.parity} de paridade. Os dados continuam disponíveis com até ${s.parity} disco(s) perdido(s); ${pct}% do espaço é usado para proteção.`;
+  return `Erasure coding: cada bloco de dados vira ${s.dataShards} fragmento(s) de dados e ${s.parity} de paridade, um em cada disco. Os dados continuam disponíveis com até ${s.parity} disco(s) perdido(s); ${pct}% do espaço é usado para proteção.`;
+}
+
+function modeDiagram(s) {
+  if (s.mode !== "erasure") return "";
+  const d = Array.from({ length: s.dataShards }, (_, i) => `<span class="shard d">D${i + 1}</span>`).join("");
+  const p = Array.from({ length: s.parity }, (_, i) => `<span class="shard p">P${i + 1}</span>`).join("");
+  return `<p class="small faint" style="margin-bottom:4px">Cada bloco gravado:</p><div class="shards" aria-label="${s.dataShards} fragmentos de dados e ${s.parity} de paridade">${d}${p}</div>`;
 }
 
 async function serverView() {
   const [i, s] = await Promise.all([api("GET", "/api/info"), api("GET", "/api/system")]);
   const h = s.heal;
-  const disks = s.disks.map(d => {
+  const bays = s.disks.map(d => {
     const used = d.total ? (d.total - d.free) / d.total * 100 : 0;
-    return `<tr><td class="num">${d.index + 1}</td><td><code>${esc(d.path)}</code></td>
-      <td>${d.online ? '<span class="tag good">Online</span>' : '<span class="tag bad">Offline</span>'}</td>
-      <td class="hide-sm"><div class="meter" title="${used.toFixed(0)}% usado"><i style="width:${used}%"></i></div></td>
-      <td class="r num">${d.total ? `${size(d.free)} livres de ${size(d.total)}` : ""}</td></tr>`;
+    return `<div class="bay ${d.online ? "" : "off"}">
+      <div class="bay-top"><div class="drive" aria-hidden="true"></div><div><div class="bay-title">Disco ${d.index + 1}</div>${d.online ? chip("Online", "ok") : chip("Offline", "bad")}</div></div>
+      <code>${esc(d.path)}</code>
+      ${d.total ? `<div class="usage"><div class="bar ${used > 90 ? "bad" : used > 75 ? "warn" : ""}"><i style="width:${used}%"></i></div><span class="small faint num">${size(d.free)} livres de ${size(d.total)}</span></div>` : ""}
+    </div>`;
   }).join("");
+  const healBody = h.running ? `<p>${chip("Em andamento")} ${h.checked.toLocaleString("pt-BR")} versão(ões) verificada(s)…</p>`
+    : h.finished ? `<dl class="kv"><dt>Última verificação</dt><dd>${whenFull(h.finished)}${h.deep ? " (completa)" : ""}</dd><dt>Verificadas</dt><dd class="num">${h.checked.toLocaleString("pt-BR")}</dd><dt>Reparadas</dt><dd class="num">${h.healed}</dd><dt>Sobras removidas</dt><dd class="num">${h.orphans}</dd><dt>Irrecuperáveis</dt><dd>${h.lostCount ? chip(String(h.lostCount), "bad") : '<span class="num">0</span>'}</dd></dl>`
+    : '<p class="faint">Ainda não houve verificação desde que o servidor iniciou.</p>';
   $("#app").innerHTML = shell("server", `
-    <div class="head"><h1>Servidor</h1></div>
     ${s.writable ? "" : '<div class="banner bad">Não há discos online suficientes para gravar. Leituras podem continuar funcionando.</div>'}
-    <div class="stats"><div><b class="num">${i.buckets}</b><span class="muted">buckets</span></div><div><b class="num">${i.objects.toLocaleString("pt-BR")}</b><span class="muted">objetos</span></div><div><b class="num">${size(i.bytes)}</b><span class="muted">armazenados (todas as versões)</span></div><div><b class="num">${i.disksOnline}/${i.disks}</b><span class="muted">discos online</span></div></div>
-    <section class="section"><h2>Discos</h2>
-      <p>${esc(modeText(s))}</p>
-      <div class="panel"><table><thead><tr><th>Disco</th><th>Diretório</th><th>Situação</th><th class="hide-sm">Uso</th><th class="r">Espaço</th></tr></thead><tbody>${disks}</tbody></table></div>
-      <p class="note">Para trocar um disco, pare o servidor, monte o disco novo no mesmo diretório e inicie de novo: os dados são reconstruídos automaticamente.</p>
-    </section>
-    <section class="section"><h2>Verificação de integridade</h2>
-      <p>Confere se todas as cópias e fragmentos estão no lugar, reconstrói o que faltar e remove sobras de envios interrompidos. Roda sozinha a cada ${Math.round(s.healIntervalSecs / 3600)} hora(s) e sempre que um disco volta.</p>
-      ${h.running ? `<p><span class="tag">Em andamento</span> ${h.checked.toLocaleString("pt-BR")} versão(ões) verificada(s)…</p>`
-        : h.finished ? `<dl class="kv"><dt>Última verificação</dt><dd>${whenFull(h.finished)}${h.deep ? " (completa)" : ""}</dd><dt>Verificadas</dt><dd class="num">${h.checked.toLocaleString("pt-BR")}</dd><dt>Reparadas</dt><dd class="num">${h.healed}</dd><dt>Sobras removidas</dt><dd class="num">${h.orphans}</dd><dt>Irrecuperáveis</dt><dd class="num">${h.lostCount ? `<span class="tag bad">${h.lostCount}</span>` : "0"}</dd></dl>` : '<p class="muted">Ainda não houve verificação desde que o servidor iniciou.</p>'}
-      ${h.lost?.length ? `<p class="small">Objetos que não podem ser reconstruídos:</p><pre>${h.lost.map(esc).join("\n")}</pre>` : ""}
-      ${h.errors?.length ? `<p class="small">Erros:</p><pre>${h.errors.slice(0, 20).map(esc).join("\n")}</pre>` : ""}
-      <p style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn primary" id="heal" ${h.running ? "disabled" : ""}>Verificar agora</button><button class="btn" id="heal-deep" ${h.running ? "disabled" : ""}>Verificação completa</button></p>
-      <p class="note">A verificação completa lê todos os dados para detectar corrupção silenciosa (bitrot). Pode levar muito tempo em servidores grandes.</p>
-    </section>
-    <section class="section"><h2>Monitoramento</h2>
-      <dl class="kv">
+    ${pageHead("Servidor", "Discos, integridade dos dados e monitoramento.")}
+    <div class="stats">
+      <div class="stat"><b class="num">${i.buckets}</b><span>buckets</span></div>
+      <div class="stat"><b class="num">${i.objects.toLocaleString("pt-BR")}</b><span>objetos</span></div>
+      <div class="stat"><b class="num">${size(i.bytes)}</b><span>armazenados (todas as versões)</span></div>
+      <div class="stat"><b class="num">${i.disksOnline}/${i.disks}</b><span>discos online</span></div>
+    </div>
+    ${card({ title: "Discos", desc: esc(modeText(s)), ctl: chip(s.mode === "single" ? "Um disco" : s.mode === "mirror" ? "Espelhamento" : "Erasure coding", s.mode === "single" ? "warn" : "ok"),
+      body: `${modeDiagram(s)}<div class="bays">${bays}</div>`,
+      foot: '<span class="left faint small">Para trocar um disco, pare o servidor, monte o disco novo no mesmo diretório e inicie de novo: os dados são reconstruídos automaticamente.</span>' })}
+    ${card({ title: "Verificação de integridade", desc: `Confere se todas as cópias e fragmentos estão no lugar, reconstrói o que faltar e remove sobras de envios interrompidos. Roda sozinha a cada ${Math.round(s.healIntervalSecs / 3600)} hora(s) e sempre que um disco volta.`,
+      ctl: h.running ? chip("Em andamento") : h.lostCount ? chip("Com problemas", "bad") : h.finished ? chip("Tudo certo", "ok") : "",
+      body: `${healBody}
+        ${h.lost?.length ? `<p class="small" style="margin-top:12px">Objetos que não podem ser reconstruídos:</p><pre>${h.lost.map(esc).join("\n")}</pre>` : ""}
+        ${h.errors?.length ? `<p class="small" style="margin-top:12px">Erros:</p><pre>${h.errors.slice(0, 20).map(esc).join("\n")}</pre>` : ""}`,
+      foot: `<span class="left faint small">A verificação completa lê todos os dados para detectar corrupção silenciosa e pode demorar.</span><button class="btn" id="heal-deep" ${h.running ? "disabled" : ""}>Verificação completa</button><button class="btn primary" id="heal" ${h.running ? "disabled" : ""}>Verificar agora</button>` })}
+    ${card({ title: "Monitoramento", body: `<dl class="kv">
         <dt>Saúde</dt><dd><code>${esc(i.serverUrl)}/_boxspace/health</code></dd>
-        <dt>Métricas</dt><dd><code>${esc(i.serverUrl)}/_boxspace/metrics</code> ${s.metricsEnabled ? (s.metricsProtected ? '<span class="tag">com token</span>' : '<span class="tag warn">públicas</span>') : '<span class="tag warn">desligadas</span>'}</dd>
-        <dt>Auditoria</dt><dd>${s.audit ? '<span class="tag good">Ligada</span>' : '<span class="tag warn">Desligada</span>'}</dd>
+        <dt>Métricas</dt><dd><code>${esc(i.serverUrl)}/_boxspace/metrics</code> ${s.metricsEnabled ? (s.metricsProtected ? chip("com token") : chip("públicas", "warn")) : chip("desligadas", "plain")}</dd>
+        <dt>Auditoria</dt><dd>${s.audit ? chip("Ligada", "ok") : chip("Desligada", "warn")}</dd>
         <dt>Replicação</dt><dd>${s.replication.pending} pendente(s), ${s.replication.failed} com falha</dd>
-      </dl>
-      ${s.metricsEnabled ? "" : '<p class="note">Para coletar métricas com Prometheus, defina <code>BOXSPACE_METRICS_TOKEN</code>.</p>'}
-    </section>
-    ${connectHtml(i)}`);
+      </dl>${s.metricsEnabled ? "" : '<p class="small faint" style="margin-top:12px">Para coletar métricas com Prometheus, defina <code>BOXSPACE_METRICS_TOKEN</code>.</p>'}` })}
+    ${connectCard(i)}`);
   const go = deep => async () => { try { await api("POST", "/api/system/heal", { deep }); toast("Verificação iniciada."); setTimeout(render, 600); } catch (e) { fail(e); } };
   $("#heal").onclick = go(false);
   $("#heal-deep").onclick = go(true);
   if (h.running) pollTimer = setTimeout(() => { if (parseHash().parts[0] === "server") render(); }, 3000);
 }
 
-function connectHtml(i) {
+function connectCard(i) {
   const ak = state.me.accessKey;
-  return `<section class="section"><h2>Conectar uma aplicação</h2>
-      <p>O BoxSpace fala a API do S3. Use o endereço abaixo como endpoint em qualquer cliente S3.</p>
-      <dl class="kv"><dt>Endpoint</dt><dd><code>${esc(i.serverUrl)}</code></dd><dt>Região</dt><dd><code>${esc(i.region)}</code></dd><dt>Versão</dt><dd>BoxSpace ${esc(i.version)}</dd></dl>
+  return card({ title: "Conectar uma aplicação", desc: "O BoxSpace fala a API do S3. Use o endereço abaixo como endpoint em qualquer cliente S3.",
+    body: `<dl class="kv"><dt>Endpoint</dt><dd><code>${esc(i.serverUrl)}</code></dd><dt>Região</dt><dd><code>${esc(i.region)}</code></dd><dt>Versão</dt><dd>BoxSpace ${esc(i.version)}</dd></dl>
+      <div class="snippets">
       <h3>Python (boto3)</h3>
 <pre>import boto3
 s3 = boto3.client("s3",
@@ -1085,15 +1303,14 @@ aws --endpoint-url ${esc(i.serverUrl)} s3 ls</pre>
 const s3 = new S3Client({
   endpoint: "${esc(i.serverUrl)}", region: "${esc(i.region)}", forcePathStyle: true,
   credentials: { accessKeyId: "${esc(ak)}", secretAccessKey: "SUA_SECRET_KEY" },
-});</pre>
-    </section>`;
+});</pre></div>` });
 }
 
 async function aboutView() {
   const i = await api("GET", "/api/info");
-  $("#app").innerHTML = shell("about", `<div class="head"><h1>Conectar</h1></div>
-    <div class="stats"><div><b class="num">${i.buckets}</b><span class="muted">buckets</span></div><div><b class="num">${i.objects.toLocaleString("pt-BR")}</b><span class="muted">objetos</span></div><div><b class="num">${size(i.bytes)}</b><span class="muted">armazenados</span></div></div>
-    ${connectHtml(i)}`);
+  $("#app").innerHTML = shell("about", `${pageHead("Conectar", "Como usar o BoxSpace a partir das suas aplicações.")}
+    <div class="stats"><div class="stat"><b class="num">${i.buckets}</b><span>buckets</span></div><div class="stat"><b class="num">${i.objects.toLocaleString("pt-BR")}</b><span>objetos</span></div><div class="stat"><b class="num">${size(i.bytes)}</b><span>armazenados</span></div></div>
+    ${connectCard(i)}`);
 }
 
 render();
