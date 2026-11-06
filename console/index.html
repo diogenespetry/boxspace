@@ -358,6 +358,149 @@ dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1
   dl.kv dd { margin-bottom: 8px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+
+/* ===== Polimento visual (v0.3.2) ===== */
+:root {
+  --r: 10px;
+  --r-lg: 16px;
+  --shadow: 0 1px 2px rgba(16,40,60,.05), 0 4px 14px rgba(16,40,60,.05);
+  --shadow-hover: 0 2px 4px rgba(16,40,60,.06), 0 10px 28px rgba(16,40,60,.10);
+  --grad: linear-gradient(135deg, #2A6A94 0%, #1E4D6B 55%, #173E57 100%);
+  --ring: 0 0 0 4px color-mix(in srgb, var(--steel) 22%, transparent);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --shadow: 0 1px 2px rgba(0,0,0,.35), 0 4px 14px rgba(0,0,0,.25);
+    --shadow-hover: 0 2px 4px rgba(0,0,0,.4), 0 10px 28px rgba(0,0,0,.4);
+    --grad: linear-gradient(135deg, #3B83B3 0%, #2A6A94 60%, #1E4D6B 100%);
+  }
+}
+body { background: radial-gradient(1200px 500px at 85% -10%, color-mix(in srgb, var(--steel) 9%, transparent), transparent 70%), var(--bg); background-attachment: fixed; }
+::selection { background: color-mix(in srgb, var(--mark) 55%, transparent); }
+h1 { font-size: 1.9rem; letter-spacing: -.01em; }
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+main > * { animation: rise .35s ease both; }
+main > *:nth-child(2) { animation-delay: .05s; }
+main > *:nth-child(3) { animation-delay: .1s; }
+main > *:nth-child(n+4) { animation-delay: .14s; }
+
+/* Botões */
+.btn { border-radius: var(--r); box-shadow: 0 1px 1px rgba(16,40,60,.05); transition: background .15s, border-color .15s, box-shadow .15s, transform .08s; }
+.btn:hover { box-shadow: 0 2px 8px rgba(16,40,60,.10); }
+.btn:active { transform: translateY(1px); box-shadow: none; }
+.btn.primary { background: var(--grad); border-color: transparent; box-shadow: 0 2px 8px color-mix(in srgb, var(--steel) 40%, transparent), inset 0 1px 0 rgba(255,255,255,.18); }
+.btn.primary:hover { filter: brightness(1.08); background: var(--grad); border-color: transparent; box-shadow: 0 4px 14px color-mix(in srgb, var(--steel) 50%, transparent), inset 0 1px 0 rgba(255,255,255,.18); }
+.btn.ghost, .btn.link { box-shadow: none; }
+.btn.ghost:hover, .btn.link:hover { box-shadow: none; }
+.btn.danger:hover { background: var(--danger-soft); border-color: var(--danger); }
+.btn.danger.solid:hover { background: var(--danger); filter: brightness(1.08); }
+
+/* Formulários */
+.input, .field input, .field select, .field textarea { border-radius: var(--r); transition: border-color .15s, box-shadow .15s; }
+.input:focus, .field input:focus, .field select:focus, .field textarea:focus { box-shadow: var(--ring); }
+.switch input { background: var(--line-strong); box-shadow: inset 0 1px 2px rgba(0,0,0,.12); }
+.switch input:checked { background: var(--grad); }
+.choice { border-radius: var(--r); }
+.choice:hover { transform: translateY(-1px); box-shadow: var(--shadow); }
+.choice:has(input:checked) { box-shadow: inset 0 0 0 1px var(--steel), var(--shadow); }
+
+/* Login */
+.login-brand { background: radial-gradient(600px 400px at 20% 10%, rgba(255,255,255,.14), transparent 60%), linear-gradient(160deg, #2A6A94 0%, #1E4D6B 45%, #0F2C40 100%); }
+.login-brand::before { content: ""; position: absolute; width: 520px; height: 520px; right: -180px; top: -160px; border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--mark) 30%, transparent), transparent 65%); filter: blur(10px); }
+.login-brand::after { content: ""; position: absolute; inset: 0; background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px); background-size: 44px 44px; mask-image: radial-gradient(circle at 30% 40%, #000, transparent 75%); -webkit-mask-image: radial-gradient(circle at 30% 40%, #000, transparent 75%); pointer-events: none; }
+.login-brand > * { position: relative; z-index: 1; }
+.login-brand .stripes { z-index: 1; }
+.login-brand .wordmark span { text-shadow: 0 2px 18px rgba(0,0,0,.25); }
+.login-form { background: radial-gradient(500px 300px at 80% 0%, color-mix(in srgb, var(--steel) 10%, transparent), transparent 70%), var(--bg); }
+.login-form form { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 34px 30px 28px; box-shadow: var(--shadow-hover); animation: rise .45s ease both; }
+.login-form .btn.primary { width: 100%; min-height: 42px; }
+
+/* Barra lateral */
+.rail { background: linear-gradient(180deg, var(--rail) 0%, var(--rail-deep) 100%); box-shadow: 4px 0 24px rgba(10,30,45,.18); }
+.shell { background: linear-gradient(to right, var(--rail-deep) 236px, transparent 236px); }
+.rail .brand { padding-bottom: 22px; margin-bottom: 4px; border-bottom: 1px solid rgba(255,255,255,.08); }
+.rail .brand span { letter-spacing: .01em; }
+.rail .group { text-transform: uppercase; font-size: .68rem; letter-spacing: .1em; color: #7FA1B8; }
+.rail nav a { border-radius: 10px; transition: background .15s, color .15s, transform .15s; }
+.rail nav a:hover { transform: translateX(2px); }
+.rail nav a[aria-current="page"] { background: linear-gradient(90deg, rgba(255,255,255,.17), rgba(255,255,255,.06)); box-shadow: inset 0 0 0 1px rgba(255,255,255,.08); }
+.rail nav a[aria-current="page"]::before { box-shadow: 0 0 12px var(--mark); }
+.rail .who { background: rgba(255,255,255,.07); border: 1px solid rgba(255,255,255,.08); }
+.rail .avatar { background: linear-gradient(135deg, #FFD95A, #F2C230); box-shadow: 0 2px 8px rgba(0,0,0,.25); }
+
+/* Cabeçalhos e abas */
+.page-head { padding-bottom: 18px; margin-bottom: 24px; border-bottom: 1px solid var(--line); }
+.path { border-bottom-width: 3px; }
+.tabs { gap: 2px; }
+.tabs a { border-radius: 8px 8px 0 0; transition: background .15s, color .15s; }
+.tabs a:hover { background: var(--well); }
+.tabs a[aria-current="page"] { border-bottom-width: 3px; color: var(--steel-ink); font-weight: 600; }
+
+/* Cartões */
+.card { transition: box-shadow .2s, border-color .2s; }
+.card:hover { box-shadow: var(--shadow-hover); }
+.card-head h2 { font-size: 1.12rem; }
+.card-foot { background: linear-gradient(180deg, var(--well), color-mix(in srgb, var(--well) 70%, var(--surface))); }
+.banner { border-radius: var(--r); box-shadow: var(--shadow); }
+
+/* Estatísticas */
+.stat { position: relative; overflow: hidden; padding: 18px 20px 18px 22px; transition: transform .2s, box-shadow .2s; }
+.stat::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 4px; background: var(--grad); }
+.stat:nth-child(4n+2)::before { background: linear-gradient(180deg, #FFD95A, #F2C230); }
+.stat:nth-child(4n+3)::before { background: linear-gradient(180deg, #4FB57F, #2F7A4F); }
+.stat:nth-child(4n+4)::before { background: linear-gradient(180deg, #8E7CD6, #5B4BB0); }
+.stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+.stat b { font-size: 2.05rem; letter-spacing: -.01em; }
+.stat span { text-transform: uppercase; font-size: .72rem; letter-spacing: .07em; font-weight: 600; color: var(--ink-3); }
+
+/* Tabelas */
+th { text-transform: uppercase; font-size: .7rem; letter-spacing: .07em; padding: 11px 16px; }
+td { padding: 12px 16px; }
+tbody tr:hover { background: color-mix(in srgb, var(--steel-soft) 55%, transparent); }
+.ficon { width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, var(--steel-soft), color-mix(in srgb, var(--steel-soft) 60%, var(--surface))); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--steel) 12%, transparent); }
+.ficon.folder { background: linear-gradient(135deg, #FFE48A, var(--mark-soft)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--mark) 45%, transparent); }
+@media (prefers-color-scheme: dark) { .ficon.folder { background: var(--mark-soft); } }
+.bar { height: 8px; border-radius: 99px; }
+.bar i { border-radius: 99px; background: var(--grad); transition: width .5s ease; }
+.bar.warn i { background: linear-gradient(90deg, #F8D766, #F2C230); }
+.bar.bad i { background: linear-gradient(90deg, #E5796E, #B3362B); }
+.chip { padding: 3px 10px 3px 9px; box-shadow: inset 0 0 0 1px color-mix(in srgb, currentColor 14%, transparent); }
+.chip.ok i { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 25%, transparent); }
+.empty { padding: 56px 24px; }
+.empty .art { width: 72px; height: 72px; border-radius: 22px; background: linear-gradient(135deg, var(--steel-soft), var(--well)); color: var(--steel-ink); box-shadow: inset 0 0 0 1px var(--line), var(--shadow); }
+
+/* Barras de ferramentas */
+.bulk { background: var(--grad); border-radius: 12px; box-shadow: 0 6px 20px color-mix(in srgb, var(--steel) 35%, transparent); animation: rise .2s ease both; }
+.dropping .card { outline-color: var(--steel); background: color-mix(in srgb, var(--steel-soft) 40%, var(--surface)); }
+
+/* Discos / diagrama */
+.bay { background: var(--surface); box-shadow: var(--shadow); transition: transform .2s, box-shadow .2s; }
+.bay:hover { transform: translateY(-2px); box-shadow: var(--shadow-hover); }
+.drive { background: linear-gradient(160deg, #3C86B5, #1E4D6B); }
+.shard { border-radius: 7px; }
+.shard.d { background: var(--grad); }
+.row-box { border-radius: 12px; }
+pre { border-radius: 10px; }
+
+/* Gaveta, diálogo, avisos */
+.drawer { border-left: 0; box-shadow: none; }
+.drawer.open { box-shadow: -20px 0 60px rgba(12,30,45,.28); }
+.drawer header { background: linear-gradient(180deg, var(--well), var(--surface)); }
+dialog { border-radius: 20px; border: 1px solid var(--line); }
+dialog[open] { animation: rise .22s ease both; }
+dialog::backdrop { background: rgba(8,20,30,.55); backdrop-filter: blur(5px); }
+.uploads { border-radius: 16px; }
+.toast { border-radius: 12px; padding: 12px 20px; animation: rise .25s ease both; }
+
+/* Barra de rolagem */
+* { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
+@media (max-width: 860px) {
+  .shell { background: none; }
+  .rail { box-shadow: 0 4px 16px rgba(10,30,45,.2); }
+  .rail nav a:hover { transform: none; }
+  .login-form form { padding: 26px 22px; }
+}
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; } }
 </style>
 </head>
 <body>
