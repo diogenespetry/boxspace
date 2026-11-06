@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 40" role="img" aria-label="BoxSpace">
+  <g transform="translate(2 4) scale(1.0)">
+    <path d="M16 3 27 9.5 16 16 5 9.5z" fill="#F2C230"/>
+    <path d="M5 9.5 16 16v13L5 22.5z" fill="#1E4D6B"/>
+    <path d="M27 9.5 16 16v13l11-6.5z" fill="#2F7399"/>
+    <path d="M8 14.2 13 17.1v2.2l-5-2.9z" fill="#fff" opacity=".35"/>
+    <circle cx="26.5" cy="4.5" r="1.7" fill="#F2C230"/>
+  </g>
+  <text x="40" y="27" font-family="Bahnschrift, 'DIN Alternate', 'Roboto Condensed', system-ui, sans-serif" font-size="22" font-weight="700" fill="#15202A">BoxSpace</text>
+</svg>
