@@ -76,17 +76,41 @@ pub fn ip_refused(app: &App, ip: IpAddr, reason: &str, source: &str, method: &st
 /// Count an authentication failure; log a ban if it triggered one.
 pub fn auth_failed(app: &App, ip: IpAddr, source: &str) {
     if let Some(ban) = app.ipfilter.record_failure(ip) {
-        app.audit.log(audit::Entry {
-            time: Utc::now(),
-            request_id: random_hex(8).to_uppercase(),
-            source: source.into(),
-            op: "IpBanned".into(),
-            status: 403,
-            remote: ban.ip.clone(),
-            error: Some(format!("{} falhas de autenticação; bloqueado até {}", ban.failures, iso8601(&ban.until))),
-            ..Default::default()
-        });
+        log_ban(app, ban, source, "falhas de autenticação");
     }
+}
+
+/// Count an anonymous request that was refused; log a ban if it triggered one.
+fn anonymous_denied(app: &App, ip: IpAddr) {
+    if let Some(ban) = app.ipfilter.record_denied(ip) {
+        log_ban(app, ban, "s3", "requisições anônimas recusadas");
+    }
+}
+
+/// True when the request carries no credentials at all (no Authorization
+/// header and no presigned-URL parameters).
+fn is_anonymous(parts: &Parts) -> bool {
+    if parts.headers.contains_key(axum::http::header::AUTHORIZATION) {
+        return false;
+    }
+    let q = parts.uri.query().unwrap_or("");
+    !q.split('&').any(|kv| {
+        let k = kv.split('=').next().unwrap_or("");
+        k.eq_ignore_ascii_case("X-Amz-Credential") || k.eq_ignore_ascii_case("X-Amz-Signature") || k.eq_ignore_ascii_case("AWSAccessKeyId") || k.eq_ignore_ascii_case("Signature")
+    })
+}
+
+fn log_ban(app: &App, ban: crate::ipfilter::BanInfo, source: &str, what: &str) {
+    app.audit.log(audit::Entry {
+        time: Utc::now(),
+        request_id: random_hex(8).to_uppercase(),
+        source: source.into(),
+        op: "IpBanned".into(),
+        status: 403,
+        remote: ban.ip,
+        error: Some(format!("{} {what}; bloqueado até {}", ban.failures, iso8601(&ban.until))),
+        ..Default::default()
+    });
 }
 
 pub async fn handle(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<SocketAddr>, req: Request) -> Response {
@@ -115,6 +139,7 @@ pub async fn handle(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<
         .and_then(|v| v.parse().ok())
         .unwrap_or(0u64);
     tracing::debug!("{} {}", method, parts.uri);
+    let anonymous = is_anonymous(&parts);
     let mut access_key = None;
     let mut error = None;
     let mut resp = match route(&app, parts, body, &target, &mut access_key).await {
@@ -125,6 +150,8 @@ pub async fn handle(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<
             }
             if matches!(e.code, "SignatureDoesNotMatch" | "InvalidAccessKeyId") {
                 auth_failed(&app, ip, "s3");
+            } else if e.code == "AccessDenied" && anonymous {
+                anonymous_denied(&app, ip);
             }
             error = Some(e.code.to_string());
             e.to_response(head, &rid)

@@ -262,6 +262,7 @@ td.name a:hover .icon { color: var(--steel-ink); }
 .target .opts { grid-column: 1 / -1; display: flex; gap: 18px; align-items: center; flex-wrap: wrap; }
 .grant { grid-template-columns: 1fr 180px auto; }
 .trio { grid-template-columns: repeat(3, 1fr); }
+.quad { grid-template-columns: repeat(4, 1fr); }
 .row-box .field { margin: 0; }
 
 /* Disk bays */
@@ -353,7 +354,7 @@ dialog .foot { display: flex; justify-content: flex-end; gap: 8px; margin-top: 1
   .card tr:has(td.cb) td:nth-child(3) { grid-column: 2; }
   .card td.r { text-align: left; white-space: nowrap; }
   .row-actions { flex-wrap: wrap; }
-  .rule, .hook, .target, .grant, .trio { grid-template-columns: 1fr 1fr; }
+  .rule, .hook, .target, .grant, .trio, .quad { grid-template-columns: 1fr 1fr; }
   dl.kv { grid-template-columns: 1fr; gap: 2px 0; }
   dl.kv dd { margin-bottom: 8px; }
 }
@@ -1293,6 +1294,7 @@ async function ipView() {
       <td class="wide"><span class="mono">${esc(b.ip)}</span></td>
       <td class="faint num">${whenFull(b.since)}</td>
       <td class="faint num">${whenFull(b.until)}</td>
+      <td>${b.reason === "denied" ? chip("Varredura anônima", "warn") : chip("Autenticação", "bad")}</td>
       <td class="r num">${b.failures}</td>
       <td><div class="row-actions"><button class="btn link" data-unban="${esc(b.ip)}">Desbloquear</button><button class="btn link danger" data-perm="${esc(b.ip)}">Bloquear de vez</button></div></td></tr>`).join("");
   $("#app").innerHTML = shell("ips", `
@@ -1313,25 +1315,26 @@ async function ipView() {
       ctl: `<button class="btn primary" id="add-rule">${icon("plus")}Adicionar regra</button>`,
       flush: true, body: cfg.rules.length ? `<div class="table-wrap"><table><thead><tr><th>Endereço</th><th>Ação</th><th>Onde</th><th class="hide-sm">Validade</th><th class="hide-sm">Observação</th><th></th></tr></thead><tbody>${rules}</tbody></table></div>`
         : empty("shield", "Nenhuma regra", "Adicione uma regra para bloquear ou permitir um endereço ou uma faixa.") })}
-    ${card({ title: "Bloqueio automático", desc: "Bloqueia por um tempo os endereços que erram a autenticação várias vezes seguidas, tanto na API S3 quanto no login do console.",
+    ${card({ title: "Bloqueio automático", desc: "Bloqueia por um tempo os endereços que erram a autenticação várias vezes seguidas (API S3 ou login do console) e os que fazem muitas requisições anônimas recusadas, como robôs procurando <code>.env</code> ou <code>.git</code>.",
       ctl: sw("auto-on", cfg.auto.enabled, cfg.auto.enabled ? "Ativado" : "Desativado"),
-      body: `<div class="row-box trio">
+      body: `<div class="row-box quad">
         <div class="field"><label for="auto-max">Tentativas erradas</label><input id="auto-max" type="number" min="1" value="${cfg.auto.maxFailures}"></div>
+        <div class="field"><label for="auto-denied" title="Requisições sem credencial recusadas com AccessDenied. 0 desliga.">Acessos anônimos recusados</label><input id="auto-denied" type="number" min="0" value="${cfg.auto.maxDenied ?? 30}"></div>
         <div class="field"><label for="auto-win">Dentro de (minutos)</label><input id="auto-win" type="number" min="1" value="${Math.round(cfg.auto.windowSecs / 60)}"></div>
         <div class="field"><label for="auto-ban">Bloquear por (minutos)</label><input id="auto-ban" type="number" min="1" value="${Math.round(cfg.auto.banSecs / 60)}"></div>
       </div>`,
       foot: '<button class="btn primary" id="save-auto">Salvar bloqueio automático</button>' })}
     ${card({ title: "Bloqueados agora", desc: "Endereços bloqueados automaticamente. Esses bloqueios terminam sozinhos e também ao reiniciar o servidor.",
       ctl: r.bans.length ? chip(`${r.bans.length} ativo(s)`, "bad") : chip("Nenhum", "ok"),
-      flush: true, body: r.bans.length ? `<div class="table-wrap"><table><thead><tr><th>Endereço</th><th>Desde</th><th>Até</th><th class="r">Falhas</th><th></th></tr></thead><tbody>${bans}</tbody></table></div>`
-        : empty("check", "Nenhum endereço bloqueado", "Quando alguém errar a autenticação muitas vezes, o endereço aparece aqui.") })}`);
+      flush: true, body: r.bans.length ? `<div class="table-wrap"><table><thead><tr><th>Endereço</th><th>Desde</th><th>Até</th><th>Motivo</th><th class="r">Tentativas</th><th></th></tr></thead><tbody>${bans}</tbody></table></div>`
+        : empty("check", "Nenhum endereço bloqueado", "Quando alguém errar a autenticação ou fizer muitas requisições anônimas recusadas, o endereço aparece aqui.") })}`);
   $("#save-mode").onclick = async () => {
     const mode = $('[name="ipmode"]:checked').value;
     if (mode === "allowlist" && !await confirmDlg("Permitir só a lista", "Qualquer endereço sem regra de permissão perderá o acesso imediatamente, inclusive aplicações que usam a API.", "Ativar lista de permissão")) return;
     save({ ...cfg, mode }, "Modo salvo.");
   };
   $("#save-auto").onclick = () => save({ ...cfg, auto: { enabled: $("#auto-on").checked, maxFailures: +$("#auto-max").value,
-    windowSecs: +$("#auto-win").value * 60, banSecs: +$("#auto-ban").value * 60 } }, "Bloqueio automático salvo.");
+    maxDenied: +$("#auto-denied").value, windowSecs: +$("#auto-win").value * 60, banSecs: +$("#auto-ban").value * 60 } }, "Bloqueio automático salvo.");
   $("#auto-on").onchange = ev => { ev.target.nextElementSibling.textContent = ev.target.checked ? "Ativado" : "Desativado"; };
   $$("[data-rm]").forEach(b => b.onclick = () => save({ ...cfg, rules: cfg.rules.filter((_, i) => i !== +b.dataset.rm) }, "Regra removida."));
   $$("[data-unban]").forEach(b => b.onclick = async () => {

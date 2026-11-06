@@ -1,6 +1,7 @@
 //! Source-IP filtering: manual block/allow rules (CIDR, IPv4 and IPv6),
 //! an optional allowlist mode, and automatic temporary bans after repeated
-//! authentication failures.
+//! authentication failures or repeated anonymous requests that were denied
+//! (scanners probing for buckets such as `.env` or `.git`).
 //!
 //! Evaluation order for a client address:
 //! 1. loopback is always allowed (the local healthcheck and an admin on the
@@ -47,13 +48,16 @@ pub struct AutoBan {
     pub enabled: bool,
     /// Failed authentications within `window_secs` that trigger a ban.
     pub max_failures: u32,
+    /// Anonymous requests refused with AccessDenied within `window_secs` that
+    /// trigger a ban. 0 disables this check.
+    pub max_denied: u32,
     pub window_secs: u64,
     pub ban_secs: u64,
 }
 
 impl Default for AutoBan {
     fn default() -> Self {
-        AutoBan { enabled: true, max_failures: 10, window_secs: 300, ban_secs: 900 }
+        AutoBan { enabled: true, max_failures: 10, max_denied: 30, window_secs: 300, ban_secs: 900 }
     }
 }
 
@@ -142,6 +146,17 @@ pub struct BanInfo {
     pub since: DateTime<Utc>,
     pub until: DateTime<Utc>,
     pub failures: u32,
+    /// "auth" (wrong credentials) or "denied" (anonymous requests refused).
+    pub reason: String,
+}
+
+/// What kind of strike is being counted against an address.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Strike {
+    /// Wrong signature, unknown access key or failed console login.
+    Auth,
+    /// Anonymous request refused with AccessDenied.
+    Denied,
 }
 
 struct Ban {
@@ -158,6 +173,7 @@ pub struct IpFilter {
     disabled: bool,
     compiled: RwLock<Compiled>,
     failures: Mutex<HashMap<IpAddr, Vec<Instant>>>,
+    denied: Mutex<HashMap<IpAddr, Vec<Instant>>>,
     bans: Mutex<HashMap<IpAddr, Ban>>,
     logged: Mutex<HashMap<IpAddr, Instant>>,
     pub blocked_total: AtomicU64,
@@ -231,6 +247,7 @@ impl IpFilter {
             disabled,
             compiled: RwLock::new(Compiled { cfg, nets }),
             failures: Mutex::default(),
+            denied: Mutex::default(),
             bans: Mutex::default(),
             logged: Mutex::default(),
             blocked_total: AtomicU64::new(0),
@@ -280,7 +297,7 @@ impl IpFilter {
             bans.contains_key(&ip.to_canonical())
         };
         let r = if banned {
-            Err("bloqueio automático por falhas de autenticação")
+            Err("bloqueio automático")
         } else {
             match decision {
                 Decision::Blocked => Err("bloqueado por regra"),
@@ -296,6 +313,16 @@ impl IpFilter {
 
     /// Count a failed authentication. Returns the ban if this triggered one.
     pub fn record_failure(&self, ip: IpAddr) -> Option<BanInfo> {
+        self.strike(ip, Strike::Auth)
+    }
+
+    /// Count an anonymous request refused with AccessDenied. Returns the ban
+    /// if this triggered one.
+    pub fn record_denied(&self, ip: IpAddr) -> Option<BanInfo> {
+        self.strike(ip, Strike::Denied)
+    }
+
+    fn strike(&self, ip: IpAddr, kind: Strike) -> Option<BanInfo> {
         let ip = ip.to_canonical();
         if self.disabled || ip.is_loopback() {
             return None;
@@ -305,13 +332,21 @@ impl IpFilter {
             let exempt = c.nets.iter().any(|(n, r)| r.action == "allow" && r.expires.is_none_or(|e| e > Utc::now()) && n.contains(ip));
             (c.cfg.auto.clone(), exempt)
         };
-        if !auto.enabled || exempt {
+        let max = match kind {
+            Strike::Auth => auto.max_failures,
+            Strike::Denied => auto.max_denied,
+        };
+        if !auto.enabled || exempt || max == 0 {
             return None;
         }
         let now = Instant::now();
         let window = Duration::from_secs(auto.window_secs);
+        let counter = match kind {
+            Strike::Auth => &self.failures,
+            Strike::Denied => &self.denied,
+        };
         let count = {
-            let mut f = self.failures.lock().unwrap_or_else(|e| e.into_inner());
+            let mut f = counter.lock().unwrap_or_else(|e| e.into_inner());
             if f.len() > 100_000 {
                 f.retain(|_, v| v.last().is_some_and(|t| now.duration_since(*t) < window));
             }
@@ -319,12 +354,12 @@ impl IpFilter {
             list.retain(|t| now.duration_since(*t) < window);
             list.push(now);
             let n = list.len() as u32;
-            if n >= auto.max_failures {
+            if n >= max {
                 f.remove(&ip);
             }
             n
         };
-        if count < auto.max_failures {
+        if count < max {
             return None;
         }
         let since = Utc::now();
@@ -333,13 +368,22 @@ impl IpFilter {
             since,
             until: since + chrono::Duration::seconds(auto.ban_secs as i64),
             failures: count,
+            reason: match kind {
+                Strike::Auth => "auth",
+                Strike::Denied => "denied",
+            }
+            .into(),
         };
         self.bans
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .insert(ip, Ban { until: now + Duration::from_secs(auto.ban_secs), info: info.clone() });
         self.bans_total.fetch_add(1, Ordering::Relaxed);
-        tracing::warn!("IP {ip} bloqueado por {} s após {count} falhas de autenticação", auto.ban_secs);
+        let what = match kind {
+            Strike::Auth => "falhas de autenticação",
+            Strike::Denied => "requisições anônimas recusadas",
+        };
+        tracing::warn!("IP {ip} bloqueado por {} s após {count} {what}", auto.ban_secs);
         Some(info)
     }
 
@@ -355,6 +399,7 @@ impl IpFilter {
     pub fn unban(&self, ip: IpAddr) -> bool {
         let ip = ip.to_canonical();
         self.failures.lock().unwrap_or_else(|e| e.into_inner()).remove(&ip);
+        self.denied.lock().unwrap_or_else(|e| e.into_inner()).remove(&ip);
         self.bans.lock().unwrap_or_else(|e| e.into_inner()).remove(&ip).is_some()
     }
 
@@ -431,7 +476,7 @@ mod tests {
 
     #[test]
     fn auto_ban() {
-        let cfg = IpConfig { auto: AutoBan { enabled: true, max_failures: 3, window_secs: 60, ban_secs: 60 }, ..Default::default() };
+        let cfg = IpConfig { auto: AutoBan { enabled: true, max_failures: 3, max_denied: 5, window_secs: 60, ban_secs: 60 }, ..Default::default() };
         let f = IpFilter::new(cfg, false);
         let a = ip("192.0.2.50");
         assert!(f.record_failure(a).is_none());
@@ -443,5 +488,36 @@ mod tests {
         assert!(f.unban(a));
         assert!(f.check(a, Surface::Api).is_ok());
         assert!(f.record_failure(ip("127.0.0.1")).is_none());
+    }
+
+    #[test]
+    fn auto_ban_anonymous_denied() {
+        let cfg = IpConfig { auto: AutoBan { enabled: true, max_failures: 3, max_denied: 5, window_secs: 60, ban_secs: 60 }, ..Default::default() };
+        let f = IpFilter::new(cfg, false);
+        let a = ip("192.0.2.60");
+        for _ in 0..4 {
+            assert!(f.record_denied(a).is_none());
+        }
+        // Denials and auth failures are counted separately.
+        assert!(f.record_failure(a).is_none());
+        assert!(f.check(a, Surface::Api).is_ok());
+        let ban = f.record_denied(a).expect("fifth denial bans");
+        assert_eq!(ban.reason, "denied");
+        assert!(f.check(a, Surface::Api).is_err());
+        assert!(f.unban(a));
+        assert!(f.check(a, Surface::Api).is_ok());
+
+        // max_denied = 0 turns the check off; allow rules exempt the address.
+        let off = IpFilter::new(IpConfig { auto: AutoBan { max_denied: 0, ..AutoBan::default() }, ..Default::default() }, false);
+        assert!((0..100).all(|_| off.record_denied(a).is_none()));
+        let allowed = IpFilter::new(IpConfig { rules: vec![rule("192.0.2.0/24", "allow")], auto: AutoBan { max_denied: 1, ..AutoBan::default() }, ..Default::default() }, false);
+        assert!(allowed.record_denied(a).is_none());
+        assert!(allowed.record_denied(ip("::1")).is_none());
+    }
+
+    #[test]
+    fn old_config_gets_default_max_denied() {
+        let cfg: IpConfig = serde_json::from_str(r#"{"mode":"blocklist","rules":[],"auto":{"enabled":true,"maxFailures":10,"windowSecs":300,"banSecs":900}}"#).unwrap();
+        assert_eq!(cfg.auto.max_denied, 30);
     }
 }

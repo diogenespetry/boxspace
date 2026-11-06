@@ -551,6 +551,24 @@ def t_ipfilter(binary):
         assert any(e["op"] == "IpBlocked" for e in lines)
         m = requests.get(f"{srv.url}/_boxspace/metrics", headers={"Authorization": "Bearer metrics-token"}).text
         assert "boxspace_ip_blocked_total" in m and "boxspace_ip_bans_total 2" in m, m[-800:]
+
+        # Anonymous scanners: many refused requests without credentials ban the address,
+        # while presigned-looking requests (with credentials) are not counted.
+        conf["auto"]["maxDenied"] = 5
+        assert c.put(f"{srv.curl}/api/ipfilter", json=conf).status_code == 200
+        assert c.get(f"{srv.curl}/api/ipfilter").json()["config"]["auto"]["maxDenied"] == 5
+        scanner = "192.0.2.99"
+        for path in ["/.env", "/.git/config", "/core/", "/api/", "/backup.zip"]:
+            r = requests.get(f"{srv.url}{path}", headers={"X-Forwarded-For": scanner})
+            assert r.status_code == 403, (path, r.status_code)
+        assert health(scanner) == 403, "scanner banned"
+        bans = {b["ip"]: b for b in c.get(f"{srv.curl}/api/ipfilter").json()["bans"]}
+        assert bans[scanner]["reason"] == "denied", bans
+        expired = "192.0.2.98"
+        for _ in range(8):
+            requests.get(f"{srv.url}/core/x?X-Amz-Credential=a&X-Amz-Signature=b", headers={"X-Forwarded-For": expired})
+        assert health(expired) == 200, "requests with credentials are not counted as anonymous"
+        assert c.delete(f"{srv.curl}/api/ipfilter/bans/{scanner}").json()["ok"]
         conf["rules"].append({"cidr": "203.0.113.0/24", "action": "block", "scope": "all"})
         assert c.put(f"{srv.curl}/api/ipfilter", json=conf).status_code == 200
         srv.restart()

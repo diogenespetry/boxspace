@@ -138,7 +138,7 @@ Na página **Bloqueio de IPs** do console (somente root), você controla quais e
 
 - **Regras**: bloquear ou permitir um endereço ou uma faixa CIDR, como `203.0.113.7`, `10.0.0.0/8` ou `2001:db8::/32`. Cada regra vale para a API, para o console ou para os dois, e pode ser permanente ou expirar (1 hora, 1 dia, 7 dias, 30 dias).
 - **Modo**: *bloquear os IPs da lista* (padrão) ou *permitir só os IPs da lista*.
-- **Bloqueio automático**: um endereço que erra a autenticação várias vezes seguidas, na API (assinatura ou chave inválida) ou no login do console, fica bloqueado por um tempo. O padrão é 10 erros em 5 minutos, que geram um bloqueio de 15 minutos. Os bloqueios aparecem no console, onde podem ser desfeitos ou tornados permanentes, e terminam ao reiniciar o servidor.
+- **Bloqueio automático**: um endereço que erra a autenticação várias vezes seguidas, na API (assinatura ou chave inválida) ou no login do console, fica bloqueado por um tempo. O padrão é 10 erros em 5 minutos, que geram um bloqueio de 15 minutos. Robôs que varrem o servidor sem credenciais (procurando `.env`, `.git`, buckets com nomes comuns) também são bloqueados: 30 requisições anônimas recusadas com `AccessDenied` na mesma janela geram o mesmo bloqueio. Requisições com credenciais, como links compartilhados vencidos, não entram nessa conta, e o limite `0` desliga a verificação. Os bloqueios aparecem no console, onde podem ser desfeitos ou tornados permanentes, e terminam ao reiniciar o servidor.
 
 As regras são avaliadas nesta ordem:
 
@@ -152,7 +152,7 @@ Para evitar que você se tranque para fora, o console recusa salvar uma configur
 
 Atrás de um proxy reverso, defina `BOXSPACE_TRUST_PROXY=1` para que o filtro use o IP real do cliente (`X-Forwarded-For`). Só faça isso se o BoxSpace **não** estiver acessível diretamente, porque o cabeçalho pode ser forjado.
 
-As requisições recusadas aparecem na auditoria (`IpBlocked`, no máximo uma por minuto por endereço) e os bloqueios automáticos como `IpBanned`. As métricas incluem `boxspace_ip_blocked_total`, `boxspace_ip_bans_total` e `boxspace_ip_bans_active`. As regras ficam salvas em todos os discos.
+As requisições recusadas aparecem na auditoria (`IpBlocked`, no máximo uma por minuto por endereço) e os bloqueios automáticos como `IpBanned`, com o motivo (falhas de autenticação ou requisições anônimas recusadas). As métricas incluem `boxspace_ip_blocked_total`, `boxspace_ip_bans_total` e `boxspace_ip_bans_active`. As regras ficam salvas em todos os discos.
 
 ## Monitoramento e auditoria
 
