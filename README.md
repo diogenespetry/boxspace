@@ -137,6 +137,12 @@ Para guardar documentos que não podem ser apagados antes de um prazo, como XML 
 
 > Voltar para uma versão do BoxSpace anterior à 0.4.0 desliga a proteção, porque as versões antigas ignoram esses campos.
 
+## Criptografia em repouso
+
+Com a criptografia ativada no bucket (no console, em **Configurações > Criptografia**, ou via `PutBucketEncryption` com `AES256`), os novos arquivos são gravados cifrados com AES-256-GCM. Cada objeto tem sua própria chave de dados, protegida pela chave mestra. As respostas trazem `x-amz-server-side-encryption: AES256` nos objetos cifrados, e o detalhe do arquivo no console mostra o estado de cada um.
+
+O mesmo cartão mostra quantos arquivos, versões e bytes do bucket já estão cifrados. Arquivos gravados antes de ativar a criptografia continuam em texto puro até você clicar em **Cifrar arquivos existentes**. A ação roda em segundo plano e regrava os dados de cada versão já cifrados. O conteúdo, o ETag, o id da versão e a retenção do Object Lock não mudam. Antes da troca, os dados lidos de cada objeto simples são conferidos com o ETag, e um arquivo alterado ou apagado durante a operação é deixado como está. Durante a operação, o uso de disco cresce só pelo tamanho do arquivo sendo regravado. Se o servidor reiniciar no meio, rode de novo: os arquivos já cifrados são pulados.
+
 ## Cota por bucket
 
 Em **Configurações > Cota e uso**, cada bucket pode ter um limite de espaço (somando todas as versões) e/ou de número de arquivos. Ao atingir a cota, novos envios (PutObject, CopyObject, multipart e uploads do console) são recusados com `403 QuotaExceeded`, inclusive escritas que chegam por replicação. Quando o cliente informa o tamanho, a recusa acontece antes de receber os dados. Apagar arquivos e sobrescrever com dados menores continuam permitidos, e baixar a cota abaixo do uso atual não apaga nada.
@@ -305,7 +311,7 @@ python3 tests/compat_test.py                    # compatibilidade S3 com boto3
 python3 tests/features_test.py                  # redundância, replicação, console…
 ```
 
-Os testes de compatibilidade cobrem buckets, objetos, nomes com caracteres especiais, listagens paginadas, cópia, multipart, URLs pré-assinadas, versionamento, tags, políticas, CORS, criptografia, lifecycle, streaming assinado, o console, chaves de acesso, webhooks e reinício.
+Os testes de compatibilidade cobrem buckets, objetos, nomes com caracteres especiais, listagens paginadas, cópia, multipart, URLs pré-assinadas, versionamento, tags, políticas, CORS, criptografia (incluindo a cifragem de arquivos existentes), lifecycle, streaming assinado, o console, chaves de acesso, webhooks e reinício.
 
 Os testes de recursos cobrem:
 
@@ -337,6 +343,7 @@ Os testes de recursos cobrem:
 | `replication.rs` | Fila, worker e cliente S3 da replicação |
 | `listing.rs` | Listagens com prefixo, delimitador e marcadores |
 | `ops.rs` | Operações compartilhadas entre API, console e lifecycle |
+| `reencrypt.rs` | Estado da criptografia por bucket e cifragem dos arquivos existentes |
 | `metrics.rs`, `audit.rs` | Métricas Prometheus e log de auditoria |
 | `ipfilter.rs` | Bloqueio de IPs e bloqueio automático |
 | `policy.rs`, `cors.rs`, `lifecycle.rs`, `events.rs`, `crypto.rs` | Recursos de bucket |

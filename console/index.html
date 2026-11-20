@@ -1138,8 +1138,10 @@ async function settingsView(bucket) {
       foot: can ? '<button class="btn primary" id="save-quota">Salvar cota</button>' : "" })}
     ${card({ title: "Arquivos legíveis no disco", desc: `Cada arquivo também aparece com o nome real em <code>${esc(b.readablePath)}</code>, para abrir, copiar ou fazer backup sem o BoxSpace. São só para leitura: alterações feitas direto no disco não voltam para o bucket.${b.mode === "erasure" ? " No modo erasure coding, eles são cópias completas e ocupam espaço extra no primeiro disco." : ""}`,
       ctl: sw("readable", b.readable, b.readable ? "Ativado" : "Desativado", !can) })}
-    ${card({ title: "Criptografia", desc: "Novos arquivos são cifrados no disco com AES-256. Os arquivos já existentes não mudam." + (b.readable ? " Para ativar, desligue antes os arquivos legíveis no disco." : ""),
-      ctl: sw("encryption", b.encryption, b.encryption ? "Ativada" : "Desativada", !can) })}
+    ${card({ title: "Criptografia", desc: "Novos arquivos são cifrados no disco com AES-256-GCM. Os que já existiam antes de ativar podem ser cifrados depois, sem mudar o conteúdo, o ETag ou a versão." + (b.readable ? " Para ativar, desligue antes os arquivos legíveis no disco." : ""),
+      ctl: sw("encryption", b.encryption, b.encryption ? "Ativada" : "Desativada", !can),
+      body: can ? '<div id="enc-status" class="small faint">Verificando os arquivos…</div>' : "",
+      foot: can ? '<button class="btn" id="enc-apply" hidden>Cifrar arquivos existentes</button>' : "" })}
     ${card({ title: "Acesso público", desc: "Define quem pode ler os arquivos sem uma chave de acesso.", ctl: state1(mode !== "private", mode === "public-read" ? "Leitura pública" : "Política personalizada", "Privado"),
       body: `<div class="choices">
           ${choice("mode", "private", mode === "private", "Privado", "Só quem tem uma chave de acesso.", !can)}
@@ -1184,6 +1186,34 @@ async function settingsView(bucket) {
     try { await api("PUT", `${bp}/object-lock`, {}); toast("Object Lock ativado."); render(); } catch (e) { fail(e); }
   });
   toggle("#encryption", "encryption", "Criptografia ativada.", "Criptografia desativada.");
+  const loadEnc = async () => {
+    const box = $("#enc-status");
+    if (!box) return;
+    let r;
+    try { r = await api("GET", `${bp}/encryption`); } catch (e) { box.textContent = "Não foi possível verificar: " + e.message; return; }
+    if (!document.body.contains(box)) return;
+    const st = r.status, j = r.job, n = v => v.toLocaleString("pt-BR");
+    const pct = st.bytes ? Math.floor(st.bytesEncrypted / st.bytes * 100) : (st.versions ? Math.floor(st.versionsEncrypted / st.versions * 100) : 100);
+    const all = st.versionsEncrypted === st.versions;
+    const old = st.versions - st.objects;
+    let html = st.versions === 0 ? "Nenhum arquivo guardado ainda." :
+      `<div class="usage" style="max-width:420px"><span class="num small">${all ? chip("Tudo cifrado", "ok") : ""} <b>${n(st.objectsEncrypted)}</b> de <b>${n(st.objects)}</b> arquivo(s) cifrados${old > 0 ? ` · ${n(st.versionsEncrypted)} de ${n(st.versions)} versões` : ""} · ${size(st.bytesEncrypted) || "0 B"} de ${size(st.bytes) || "0 B"}</span><div class="bar ${all ? "" : "warn"}"><i style="width:${Math.max(st.versionsEncrypted ? 2 : 0, pct)}%"></i></div></div>`;
+    if (j) {
+      const errs = j.failed ? ` · ${n(j.failed)} com erro` : "";
+      html += `<p style="margin-top:8px">${j.running ? `Cifrando arquivos existentes… ${n(j.done)} concluído(s)${errs}.` : `Última execução: ${n(j.done)} arquivo(s) cifrado(s)${errs}${j.finishedAt ? " em " + new Date(j.finishedAt).toLocaleString("pt-BR") : ""}.`}</p>`;
+      if (j.lastError) html += `<p class="small" style="color:var(--danger)">${esc(j.lastError)}</p>`;
+    }
+    box.innerHTML = html;
+    const btn = $("#enc-apply");
+    btn.hidden = !r.enabled || all || st.versions === 0;
+    btn.disabled = !!j?.running;
+    if (j?.running) setTimeout(loadEnc, 2000);
+  };
+  $("#enc-apply").onclick = async () => {
+    if (!await confirmDlg("Cifrar arquivos existentes", `Os arquivos ainda não cifrados de <b>${esc(bucket)}</b> serão regravados cifrados, em segundo plano. Durante a operação, o uso de disco cresce temporariamente pelo tamanho do arquivo sendo processado. O conteúdo e as versões não mudam.`, "Cifrar")) return;
+    try { await api("POST", `${bp}/encryption/apply`); toast("Criptografia dos arquivos existentes iniciada."); loadEnc(); } catch (e) { fail(e); }
+  };
+  loadEnc();
   $("#readable").onchange = async ev => {
     const on = ev.target.checked;
     if (!on && !await confirmDlg("Desativar arquivos legíveis", `A pasta <code>${esc(b.readablePath)}</code> será apagada do disco. Os arquivos continuam guardados no bucket.`, "Desativar")) { ev.target.checked = true; return; }

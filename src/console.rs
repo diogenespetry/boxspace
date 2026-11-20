@@ -177,7 +177,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/buckets", get(buckets_list).post(bucket_create))
         .route("/api/buckets/{b}", get(bucket_get).delete(bucket_delete))
         .route("/api/buckets/{b}/versioning", put(bucket_versioning))
-        .route("/api/buckets/{b}/encryption", put(bucket_encryption))
+        .route("/api/buckets/{b}/encryption", put(bucket_encryption).get(encryption_status))
+        .route("/api/buckets/{b}/encryption/apply", post(encryption_apply))
         .route("/api/buckets/{b}/object-lock", put(bucket_object_lock))
         .route("/api/buckets/{b}/quota", put(bucket_quota))
         .route("/api/buckets/{b}/object/legal-hold", put(object_legal_hold))
@@ -687,6 +688,28 @@ async fn bucket_encryption(State(app): State<Arc<App>>, a: Auth, Path(b): Path<S
         m.encryption = req.enabled;
         Ok(())
     })?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+async fn encryption_status(State(app): State<Arc<App>>, a: Auth, Path(b): Path<String>) -> R<Json<Value>> {
+    a.admin()?;
+    let app2 = app.clone();
+    let b2 = b.clone();
+    let st = tokio::task::spawn_blocking(move || crate::reencrypt::status(&app2, &b2))
+        .await
+        .map_err(|e| ApiError::from(S3Error::internal(e)))??;
+    Ok(Json(json!({ "enabled": app.store.bucket(&b)?.encryption, "status": st, "job": crate::reencrypt::job(&b) })))
+}
+
+async fn encryption_apply(State(app): State<Arc<App>>, a: Auth, Path(b): Path<String>) -> R<Json<Value>> {
+    a.admin()?;
+    let bm = app.store.bucket(&b)?;
+    if !bm.encryption {
+        return Err(bad("Ative a criptografia do bucket antes de cifrar os arquivos existentes."));
+    }
+    if !crate::reencrypt::start(app.clone(), b) {
+        return Err(bad("A criptografia dos arquivos existentes já está em andamento."));
+    }
     Ok(Json(json!({ "ok": true })))
 }
 

@@ -21,6 +21,7 @@ mod metrics;
 mod ops;
 mod phys;
 mod policy;
+mod reencrypt;
 mod replication;
 mod sidecar;
 mod storage;

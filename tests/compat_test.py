@@ -794,8 +794,73 @@ def t_quota(srv, s3):
     assert "naoexiste-scanner" not in m
 
 
+def t_reencrypt(srv, s3):
+    c = console_session(srv)
+    s3.create_bucket(Bucket="recifra")
+    s3.put_bucket_versioning(Bucket="recifra", VersioningConfiguration={"Status": "Enabled"})
+    marker = b"RECIFRA-PLAINTEXT-MARKER"
+    big = (marker + os.urandom(200)) * 2000
+    s3.put_object(Bucket="recifra", Key="doc.bin", Body=b"old " + marker)
+    s3.put_object(Bucket="recifra", Key="doc.bin", Body=big)
+    s3.put_object(Bucket="recifra", Key="empty", Body=b"")
+    up = s3.create_multipart_upload(Bucket="recifra", Key="multi")["UploadId"]
+    p1, p2 = marker * 220_000, b"tail" + marker
+    e1 = s3.upload_part(Bucket="recifra", Key="multi", UploadId=up, PartNumber=1, Body=p1)["ETag"]
+    e2 = s3.upload_part(Bucket="recifra", Key="multi", UploadId=up, PartNumber=2, Body=p2)["ETag"]
+    s3.complete_multipart_upload(Bucket="recifra", Key="multi", UploadId=up,
+                                 MultipartUpload={"Parts": [{"PartNumber": 1, "ETag": e1}, {"PartNumber": 2, "ETag": e2}]})
+    before = {v["VersionId"]: v for v in s3.list_object_versions(Bucket="recifra")["Versions"]}
+    st = c.get(f"{srv.curl}/api/buckets/recifra/encryption").json()
+    assert st["enabled"] is False and st["job"] is None, st
+    assert st["status"] == {"objects": 3, "objectsEncrypted": 0, "versions": 4, "versionsEncrypted": 0,
+                            "bytes": len(big) + len(marker) + 4 + len(p1) + len(p2), "bytesEncrypted": 0}, st
+    # Encryption must be on before existing data can be encrypted.
+    assert c.post(f"{srv.curl}/api/buckets/recifra/encryption/apply").status_code == 400
+    assert c.put(f"{srv.curl}/api/buckets/recifra/encryption", json={"enabled": True}).status_code == 200
+    s3.put_object(Bucket="recifra", Key="new", Body=b"new data")
+    st = c.get(f"{srv.curl}/api/buckets/recifra/encryption").json()["status"]
+    assert st["objectsEncrypted"] == 1 and st["objects"] == 4, st
+    assert c.post(f"{srv.curl}/api/buckets/recifra/encryption/apply").status_code == 200
+    for _ in range(100):
+        r = c.get(f"{srv.curl}/api/buckets/recifra/encryption").json()
+        if not r["job"]["running"]:
+            break
+        time.sleep(0.1)
+    assert r["job"]["done"] == 4 and r["job"]["failed"] == 0 and r["job"]["lastError"] is None, r
+    st = r["status"]
+    assert st["versionsEncrypted"] == st["versions"] == 5 and st["bytesEncrypted"] == st["bytes"], st
+    # Contents, ETags and version ids are unchanged; the data is now encrypted.
+    after = {v["VersionId"]: v for v in s3.list_object_versions(Bucket="recifra")["Versions"]}
+    assert set(after) - set(before) == {next(iter(set(after) - set(before)))} and len(after) == 5
+    for vid, v in before.items():
+        assert after[vid]["ETag"] == v["ETag"] and after[vid]["Size"] == v["Size"], (vid, v, after[vid])
+
+    def check():
+        assert s3.get_object(Bucket="recifra", Key="doc.bin")["Body"].read() == big
+        assert s3.get_object(Bucket="recifra", Key="multi")["Body"].read() == p1 + p2
+        assert s3.get_object(Bucket="recifra", Key="empty")["Body"].read() == b""
+        old = min(before.values(), key=lambda v: v["LastModified"])
+        assert s3.get_object(Bucket="recifra", Key="doc.bin", VersionId=old["VersionId"])["Body"].read() == b"old " + marker
+        for k in ("doc.bin", "multi", "empty"):
+            assert s3.head_object(Bucket="recifra", Key=k)["ServerSideEncryption"] == "AES256"
+        for root, _, files in os.walk(os.path.join(srv.dir, "data", ".boxspace", "objects", "recifra")):
+            for f in files:
+                with open(os.path.join(root, f), "rb") as fh:
+                    assert marker not in fh.read(), f"plaintext left on disk: {f}"
+    check()
+    # Running again finds nothing to do; the result survives a restart.
+    assert c.post(f"{srv.curl}/api/buckets/recifra/encryption/apply").status_code == 200
+    time.sleep(0.3)
+    assert c.get(f"{srv.curl}/api/buckets/recifra/encryption").json()["job"]["done"] == 0
+    srv.restart()
+    check()
+    c = console_session(srv)
+    st = c.get(f"{srv.curl}/api/buckets/recifra/encryption").json()["status"]
+    assert st["versionsEncrypted"] == 5, st
+
+
 TESTS = [t_buckets, t_objects, t_special_keys, t_listing, t_copy, t_multipart, t_presigned, t_versioning, t_tagging,
-         t_policy, t_cors, t_encryption, t_lifecycle, t_auth, t_streaming, t_console, t_access_keys, t_webhooks, t_object_lock, t_quota]
+         t_policy, t_cors, t_encryption, t_lifecycle, t_auth, t_streaming, t_console, t_access_keys, t_webhooks, t_object_lock, t_quota, t_reencrypt]
 
 
 def main():

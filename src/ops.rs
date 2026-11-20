@@ -274,6 +274,7 @@ pub async fn empty_bucket(app: &App, bucket: &str) -> Result<()> {
 pub async fn delete_bucket(app: &App, bucket: &str) -> Result<()> {
     let bm = app.store.bucket(bucket)?;
     app.store.delete_bucket(bucket)?;
+    crate::reencrypt::forget(bucket);
     // Move the data directories aside immediately (a rename is atomic), so a
     // bucket recreated with the same name right away starts from an empty
     // directory; the old data (including pending upload parts) is removed
