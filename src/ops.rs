@@ -35,6 +35,8 @@ pub struct PutOpts {
     pub decoded_len: Option<u64>,
     /// The write itself comes from replication: do not replicate it again.
     pub replica: bool,
+    /// Object Lock settings from the request (bucket default otherwise).
+    pub lock: crate::objlock::LockSpec,
 }
 
 pub const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
@@ -120,9 +122,10 @@ where
 {
     check_key(key)?;
     let bm = app.store.bucket(bucket)?;
+    crate::objlock::check_spec(&bm, &opts.lock)?;
     let encrypt = opts.encrypt.unwrap_or(bm.encryption);
     let (blob, md5) = write_body(app, bucket, stream, payload, &opts, encrypt).await?;
-    let v = ObjectVersion {
+    let mut v = ObjectVersion {
         key: key.to_string(),
         size: blob.size,
         etag: hex::encode(md5),
@@ -134,6 +137,7 @@ where
         blob: Some(blob),
         ..Default::default()
     };
+    crate::objlock::apply(&bm, &opts.lock, &mut v);
     commit_version(app, &bm, v, "ObjectCreated:Put", opts.replica).await
 }
 
@@ -153,7 +157,20 @@ pub async fn copy_data(
 }
 
 pub async fn delete_object(app: &App, bm: &BucketMeta, key: &str, version_id: Option<&str>, replica: bool) -> Result<DeleteOutcome> {
-    let out = app.store.delete_object(&bm.name, key, version_id)?;
+    delete_object_with(app, bm, key, version_id, replica, false).await
+}
+
+/// `delete_object`, optionally bypassing GOVERNANCE retention (the caller
+/// must have checked that the requester is allowed to).
+pub async fn delete_object_with(
+    app: &App,
+    bm: &BucketMeta,
+    key: &str,
+    version_id: Option<&str>,
+    replica: bool,
+    bypass_governance: bool,
+) -> Result<DeleteOutcome> {
+    let out = app.store.delete_object(&bm.name, key, version_id, bypass_governance)?;
     if let Some(m) = &out.marker {
         sidecar::write_version(app, &bm.name, m).await;
     }
@@ -183,6 +200,18 @@ pub async fn set_tags(app: &App, bucket: &str, key: &str, version_id: Option<&st
     Ok(v)
 }
 
+/// Change a version's Object Lock fields after `check` approves the change.
+pub async fn update_lock<F>(app: &App, bucket: &str, key: &str, version_id: Option<&str>, change: F) -> Result<Option<ObjectVersion>>
+where
+    F: FnOnce(&mut ObjectVersion) -> Result<()>,
+{
+    let v = app.store.try_update_version(bucket, key, version_id, change)?;
+    if let Some(v) = &v {
+        sidecar::write_version(app, bucket, v).await;
+    }
+    Ok(v)
+}
+
 pub async fn abort_upload(app: &App, upload_id: &str) -> Result<bool> {
     match app.store.delete_upload(upload_id)? {
         Some(u) => {
@@ -199,10 +228,17 @@ pub async fn abort_upload(app: &App, upload_id: &str) -> Result<bool> {
 pub async fn empty_bucket(app: &App, bucket: &str) -> Result<()> {
     let bm = app.store.bucket(bucket)?;
     let mut all = Vec::new();
+    let now = Utc::now();
+    let mut locked = 0usize;
     app.store.scan(bucket, "", |v| {
+        locked += crate::objlock::locked(&v, now) as usize;
         all.push((v.key, v.version_id));
         crate::storage::Scan::Next
     })?;
+    // Refuse up front rather than leave a half-emptied bucket.
+    if locked > 0 {
+        return Err(S3Error::new("AccessDenied", 403, format!("Access Denied because object protected by object lock ({locked} version(s)).")));
+    }
     for (k, vid) in all {
         delete_object(app, &bm, &k, Some(&vid), true).await?;
     }

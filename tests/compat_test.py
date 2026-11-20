@@ -658,8 +658,101 @@ def t_restart(srv, s3, binary):
     assert s3.get_bucket_versioning(Bucket="ver")["Status"] == "Suspended"
 
 
+def t_object_lock(srv, s3):
+    from datetime import datetime, timedelta, timezone
+    future = lambda days: datetime.now(timezone.utc) + timedelta(days=days)
+    # Plain buckets refuse lock settings.
+    s3.create_bucket(Bucket="nolock")
+    assert err_code(s3.get_object_lock_configuration, Bucket="nolock") == "ObjectLockConfigurationNotFoundError"
+    assert err_code(s3.put_object, Bucket="nolock", Key="k", Body=b"x", ObjectLockMode="GOVERNANCE",
+                    ObjectLockRetainUntilDate=future(1)) == "InvalidRequest"
+    lock_cfg = {"ObjectLockEnabled": "Enabled", "Rule": {"DefaultRetention": {"Mode": "GOVERNANCE", "Days": 1}}}
+    assert err_code(s3.put_object_lock_configuration, Bucket="nolock", ObjectLockConfiguration=lock_cfg) == "InvalidBucketState"
+
+    # Created with Object Lock: versioning is on and cannot be suspended.
+    s3.create_bucket(Bucket="fiscal", ObjectLockEnabledForBucket=True)
+    assert s3.get_bucket_versioning(Bucket="fiscal")["Status"] == "Enabled"
+    assert err_code(s3.put_bucket_versioning, Bucket="fiscal", VersioningConfiguration={"Status": "Suspended"}) == "InvalidBucketState"
+    assert s3.get_object_lock_configuration(Bucket="fiscal")["ObjectLockConfiguration"]["ObjectLockEnabled"] == "Enabled"
+
+    # COMPLIANCE: nobody can delete or shorten, not even root with bypass.
+    until = future(30).replace(microsecond=0)
+    v1 = s3.put_object(Bucket="fiscal", Key="nfe/1.xml", Body=b"<nfe/>", ObjectLockMode="COMPLIANCE",
+                       ObjectLockRetainUntilDate=until)["VersionId"]
+    h = s3.head_object(Bucket="fiscal", Key="nfe/1.xml")
+    assert h["ObjectLockMode"] == "COMPLIANCE" and h["ObjectLockRetainUntilDate"] == until, h
+    r = s3.get_object_retention(Bucket="fiscal", Key="nfe/1.xml", VersionId=v1)["Retention"]
+    assert r["Mode"] == "COMPLIANCE" and r["RetainUntilDate"] == until
+    assert err_code(s3.delete_object, Bucket="fiscal", Key="nfe/1.xml", VersionId=v1) == "AccessDenied"
+    assert err_code(s3.delete_object, Bucket="fiscal", Key="nfe/1.xml", VersionId=v1, BypassGovernanceRetention=True) == "AccessDenied"
+    assert err_code(s3.put_object_retention, Bucket="fiscal", Key="nfe/1.xml", VersionId=v1, BypassGovernanceRetention=True,
+                    Retention={"Mode": "COMPLIANCE", "RetainUntilDate": future(1)}) == "AccessDenied"
+    assert err_code(s3.put_object_retention, Bucket="fiscal", Key="nfe/1.xml", VersionId=v1,
+                    Retention={"Mode": "GOVERNANCE", "RetainUntilDate": future(60)}) == "AccessDenied"
+    s3.put_object_retention(Bucket="fiscal", Key="nfe/1.xml", VersionId=v1, Retention={"Mode": "COMPLIANCE", "RetainUntilDate": future(60)})
+    # Deleting without a version id only adds a delete marker: the data stays.
+    d = s3.delete_object(Bucket="fiscal", Key="nfe/1.xml")
+    assert d["DeleteMarker"]
+    assert s3.get_object(Bucket="fiscal", Key="nfe/1.xml", VersionId=v1)["Body"].read() == b"<nfe/>"
+    s3.delete_object(Bucket="fiscal", Key="nfe/1.xml", VersionId=d["VersionId"])  # markers are never locked
+    res = s3.delete_objects(Bucket="fiscal", Delete={"Objects": [{"Key": "nfe/1.xml", "VersionId": v1}]})
+    assert res["Errors"][0]["Code"] == "AccessDenied", res
+    assert err_code(s3.delete_bucket, Bucket="fiscal") == "BucketNotEmpty"
+
+    # Default retention applies to new objects, also multipart and copies.
+    s3.put_object_lock_configuration(Bucket="fiscal", ObjectLockConfiguration=lock_cfg)
+    got = s3.get_object_lock_configuration(Bucket="fiscal")["ObjectLockConfiguration"]
+    assert got["Rule"]["DefaultRetention"] == {"Mode": "GOVERNANCE", "Days": 1}, got
+    v2 = s3.put_object(Bucket="fiscal", Key="nfe/2.xml", Body=b"two")["VersionId"]
+    assert s3.head_object(Bucket="fiscal", Key="nfe/2.xml")["ObjectLockMode"] == "GOVERNANCE"
+    up = s3.create_multipart_upload(Bucket="fiscal", Key="big.bin")["UploadId"]
+    e = s3.upload_part(Bucket="fiscal", Key="big.bin", UploadId=up, PartNumber=1, Body=b"z" * 1000)["ETag"]
+    s3.complete_multipart_upload(Bucket="fiscal", Key="big.bin", UploadId=up, MultipartUpload={"Parts": [{"PartNumber": 1, "ETag": e}]})
+    assert s3.head_object(Bucket="fiscal", Key="big.bin")["ObjectLockMode"] == "GOVERNANCE"
+    s3.copy_object(Bucket="fiscal", Key="copy.xml", CopySource={"Bucket": "fiscal", "Key": "nfe/2.xml"})
+    assert s3.head_object(Bucket="fiscal", Key="copy.xml")["ObjectLockMode"] == "GOVERNANCE"
+
+    # GOVERNANCE: only an administrator key with the bypass header.
+    assert err_code(s3.delete_object, Bucket="fiscal", Key="nfe/2.xml", VersionId=v2) == "AccessDenied"
+    c = console_session(srv)
+    k = c.post(f"{srv.curl}/api/keys", json={"grants": [{"bucket": "fiscal", "write": True}]}).json()
+    app = client(srv, ak=k["accessKey"], sk=k["secretKey"])
+    assert err_code(app.delete_object, Bucket="fiscal", Key="nfe/2.xml", VersionId=v2, BypassGovernanceRetention=True) == "AccessDenied"
+    assert err_code(app.put_object_retention, Bucket="fiscal", Key="nfe/2.xml", VersionId=v2, BypassGovernanceRetention=True,
+                    Retention={"Mode": "GOVERNANCE", "RetainUntilDate": future(0.5)}) == "AccessDenied"
+    s3.put_object_retention(Bucket="fiscal", Key="nfe/2.xml", VersionId=v2, BypassGovernanceRetention=True,
+                            Retention={"Mode": "GOVERNANCE", "RetainUntilDate": future(0.5)})
+    s3.delete_object(Bucket="fiscal", Key="nfe/2.xml", VersionId=v2, BypassGovernanceRetention=True)
+    assert err_code(s3.head_object, Bucket="fiscal", Key="nfe/2.xml", VersionId=v2) in ("404", "NoSuchVersion")
+
+    # Legal hold blocks deletion regardless of retention, until removed.
+    v3 = s3.put_object(Bucket="fiscal", Key="hold.xml", Body=b"h", ObjectLockLegalHoldStatus="ON")["VersionId"]
+    assert s3.get_object_legal_hold(Bucket="fiscal", Key="hold.xml")["LegalHold"]["Status"] == "ON"
+    s3.put_object_retention(Bucket="fiscal", Key="hold.xml", VersionId=v3, BypassGovernanceRetention=True, Retention={})
+    assert err_code(s3.get_object_retention, Bucket="fiscal", Key="hold.xml") == "NoSuchObjectLockConfiguration"
+    assert err_code(s3.delete_object, Bucket="fiscal", Key="hold.xml", VersionId=v3, BypassGovernanceRetention=True) == "AccessDenied"
+    s3.put_object_legal_hold(Bucket="fiscal", Key="hold.xml", VersionId=v3, LegalHold={"Status": "OFF"})
+    s3.delete_object(Bucket="fiscal", Key="hold.xml", VersionId=v3)
+
+    # The console refuses too, in Portuguese, and will not empty the bucket.
+    r = c.delete(f"{srv.curl}/api/buckets/fiscal/object", params={"key": "nfe/1.xml", "versionId": v1})
+    assert r.status_code == 403 and "Object Lock" in r.json()["error"], r.text
+    r = c.delete(f"{srv.curl}/api/buckets/fiscal?force=true")
+    assert r.status_code == 403, r.text
+    assert s3.get_object(Bucket="fiscal", Key="nfe/1.xml", VersionId=v1)["Body"].read() == b"<nfe/>"
+    info = c.get(f"{srv.curl}/api/buckets/fiscal").json()
+    assert info["objectLock"] and info["lockDefault"]["mode"] == "GOVERNANCE", info
+    assert c.put(f"{srv.curl}/api/buckets/fiscal/versioning", json={"enabled": False}).status_code == 409
+
+    # Lock settings survive a restart (stored in meta.json on disk too).
+    srv.restart()
+    s3 = client(srv)
+    assert s3.head_object(Bucket="fiscal", Key="nfe/1.xml", VersionId=v1)["ObjectLockMode"] == "COMPLIANCE"
+    assert err_code(s3.delete_object, Bucket="fiscal", Key="nfe/1.xml", VersionId=v1) == "AccessDenied"
+
+
 TESTS = [t_buckets, t_objects, t_special_keys, t_listing, t_copy, t_multipart, t_presigned, t_versioning, t_tagging,
-         t_policy, t_cors, t_encryption, t_lifecycle, t_auth, t_streaming, t_console, t_access_keys, t_webhooks]
+         t_policy, t_cors, t_encryption, t_lifecycle, t_auth, t_streaming, t_console, t_access_keys, t_webhooks, t_object_lock]
 
 
 def main():

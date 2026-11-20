@@ -14,6 +14,7 @@ mod error;
 mod events;
 mod heal;
 mod ipfilter;
+mod objlock;
 mod lifecycle;
 mod listing;
 mod metrics;

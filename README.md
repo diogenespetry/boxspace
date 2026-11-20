@@ -122,6 +122,21 @@ No console, em **Configurações > Replicação**, cada bucket pode ter destinos
 - Escritas que chegam por replicação não são replicadas de volta, então dois servidores podem replicar um para o outro.
 - A secret key do destino é guardada cifrada com a chave mestra.
 
+## Object Lock (retenção de arquivos)
+
+Para guardar documentos que não podem ser apagados antes de um prazo, como XML fiscal, ative o Object Lock no bucket: na criação (opção no console ou `ObjectLockEnabledForBucket=True` na API) ou depois, em **Configurações > Object Lock**. Ativar é permanente e mantém o versionamento ligado para sempre.
+
+- **Retenção** por versão, com data final, em um de dois modos:
+  - **Governança** (`GOVERNANCE`): ninguém apaga a versão nem encurta o prazo, exceto uma chave de administrador (root ou chave sem restrição de buckets) que envie `x-amz-bypass-governance-retention: true`.
+  - **Conformidade** (`COMPLIANCE`): ninguém apaga nem encurta, nem a chave root. O prazo só pode ser estendido.
+- **Retenção legal** (legal hold): bloqueia a exclusão da versão, independentemente do prazo, até ser desligada. Qualquer chave com escrita no bucket liga e desliga; no console, fica no painel do arquivo.
+- **Retenção padrão**: configurada por bucket, em dias ou anos, e aplicada aos arquivos novos que não informam a própria (inclusive multipart e cópias; a retenção nunca é copiada da origem).
+- Apagar um arquivo sem informar a versão só cria um marcador de exclusão: os dados continuam guardados e podem ser lidos pela versão.
+- A proteção vale em todos os caminhos: API S3, exclusão em lote, console, limpeza automática (lifecycle) e exclusão forçada de bucket. O lifecycle pula versões protegidas, e o console recusa esvaziar um bucket que ainda tenha versões protegidas.
+- As configurações ficam no índice e no `meta.json` de cada versão, em todos os discos, e sobrevivem à reconstrução do índice.
+
+> Voltar para uma versão do BoxSpace anterior à 0.4.0 desliga a proteção, porque as versões antigas ignoram esses campos.
+
 ## Chaves de acesso e permissões
 
 - **Root**: acesso total, inclusive ao gerenciamento de chaves e à auditoria.
@@ -218,6 +233,7 @@ O BoxSpace serve HTTP. Para HTTPS, coloque-o atrás de um proxy reverso (Caddy, 
 | Políticas | Bucket policy no formato JSON da AWS para acesso anônimo |
 | CORS | Configuração por bucket, preflight `OPTIONS` e cabeçalhos nas respostas |
 | Criptografia | SSE-S3 (AES-256-GCM) por objeto ou como padrão do bucket |
+| Object Lock | Retenção GOVERNANCE e COMPLIANCE, legal hold, retenção padrão do bucket, `x-amz-bypass-governance-retention` (Get/PutObjectLockConfiguration, Get/PutObjectRetention, Get/PutObjectLegalHold) |
 | Lifecycle | Expiração por dias ou data, versões não atuais, delete markers expirados, aborto de uploads incompletos; filtros por prefixo e tags |
 | Escrita condicional | `If-None-Match: *` e `If-Match` no PutObject |
 | ACL | Somente ACL privada; leitura de ACL retorna o dono com FULL_CONTROL |
@@ -228,7 +244,6 @@ O servidor responde `NotImplemented` para estes recursos:
 
 - Assinatura V2 (SigV2)
 - SSE-C e SSE-KMS
-- Object Lock, retenção e legal hold
 - Configuração de replicação, website, logging, inventário, analytics e transições pela API S3 (a replicação é configurada no console)
 - ACLs públicas e grants (use bucket policy)
 - Upload via formulário POST

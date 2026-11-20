@@ -272,7 +272,8 @@ pub async fn run_once(app: &App) -> Result<(usize, usize)> {
                 let Some(days) = rule.noncurrent_days else { continue };
                 for i in 1..g.len() {
                     let since = g[i - 1].last_modified;
-                    if now >= since + day * days as i32 {
+                    // Versions under Object Lock are kept until their retention ends.
+                    if now >= since + day * days as i32 && !crate::objlock::locked(&g[i], now) {
                         actions.push((g[i].key.clone(), Some(g[i].version_id.clone())));
                     }
                 }
@@ -281,8 +282,10 @@ pub async fn run_once(app: &App) -> Result<(usize, usize)> {
         actions.dedup();
         for (key, vid) in actions {
             // Lifecycle deletions are not replicated (same as S3).
-            ops::delete_object(app, &bm, &key, vid.as_deref(), true).await?;
-            expired += 1;
+            match ops::delete_object(app, &bm, &key, vid.as_deref(), true).await {
+                Ok(_) => expired += 1,
+                Err(e) => tracing::warn!("lifecycle: {}/{key}: {}", bm.name, e.message),
+            }
         }
         for u in app.store.list_uploads(&bm.name)? {
             let stale = bm.lifecycle.iter().any(|r| {

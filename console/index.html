@@ -724,7 +724,7 @@ async function bucketsView() {
       <td class="name"><a href="#/b/${enc(b.name)}"><span class="ficon">${icon("box")}</span>${esc(b.name)}</a></td>
       <td class="r num">${b.objects.toLocaleString("pt-BR")}<span class="sm-only faint"> objeto(s), ${size(b.bytes)}</span></td>
       <td class="hide-sm"><div class="usage"><span class="num small">${size(b.bytes)}</span><div class="bar"><i style="width:${Math.max(b.bytes ? 2 : 0, b.bytes / total * 100)}%"></i></div></div></td>
-      <td class="wide">${b.public ? chip("Público", "warn") : ""}${b.versioning === "Enabled" ? chip("Versionado") : ""}${b.encryption ? chip("Criptografado") : ""}${b.readable ? chip("Arquivos legíveis", "ok") : ""}${b.replicated ? chip("Replicado") : ""}${b.writable ? "" : chip("Só leitura", "plain")}</td>
+      <td class="wide">${b.public ? chip("Público", "warn") : ""}${b.versioning === "Enabled" ? chip("Versionado") : ""}${b.objectLock ? chip("Object Lock", "warn") : ""}${b.encryption ? chip("Criptografado") : ""}${b.readable ? chip("Arquivos legíveis", "ok") : ""}${b.replicated ? chip("Replicado") : ""}${b.writable ? "" : chip("Só leitura", "plain")}</td>
       <td><div class="row-actions"><a class="btn link" href="#/b/${enc(b.name)}/settings">Configurar</a>${admin ? `<button class="btn link danger" data-del="${esc(b.name)}" data-count="${b.objects}">Excluir</button>` : ""}</div></td>
     </tr>`).join("");
   $("#app").innerHTML = shell("buckets", `
@@ -746,8 +746,9 @@ async function bucketsView() {
       <div class="field"><label for="bn">Nome</label><input id="bn" name="name" required pattern="[a-z0-9][a-z0-9.\\-]{1,61}[a-z0-9]" placeholder="meus-arquivos"></div>
       <p class="hint">De 3 a 63 caracteres: letras minúsculas, números, pontos e hífens.</p>
       <label class="choice" style="padding-left:44px"><input type="checkbox" name="readable"><b>Arquivos legíveis no disco</b><span>Cada arquivo também aparece com o nome real na pasta de dados, para abrir e copiar sem o BoxSpace. Não pode ser usado com criptografia.</span></label>
+      <label class="choice" style="padding-left:44px;margin-top:10px"><input type="checkbox" name="objectLock"><b>Object Lock (retenção de arquivos)</b><span>Impede apagar versões antes do fim de um prazo, como exige a guarda de documentos fiscais. Liga o versionamento e <b>não pode ser desligado</b> depois.</span></label>
       ${foot("Criar bucket")}`,
-    async f => { await api("POST", "/api/buckets", { name: f.get("name"), readable: f.get("readable") === "on" }); toast("Bucket criado."); location.hash = `#/b/${enc(f.get("name"))}`; });
+    async f => { await api("POST", "/api/buckets", { name: f.get("name"), readable: f.get("readable") === "on", objectLock: f.get("objectLock") === "on" }); toast("Bucket criado."); location.hash = `#/b/${enc(f.get("name"))}`; });
   $("#new-bucket")?.addEventListener("click", create);
   $("#new-bucket-2")?.addEventListener("click", create);
   $$("[data-del]").forEach(b => b.onclick = async () => {
@@ -991,6 +992,18 @@ function previewHtml(bucket, o) {
   return "";
 }
 
+const modeLabel = m => m === "COMPLIANCE" ? "Conformidade" : "Governança";
+function lockText(o, plain = false) {
+  const parts = [];
+  if (o.retainUntil) {
+    const active = new Date(o.retainUntil) > new Date();
+    parts.push(`${modeLabel(o.lockMode)} ${active ? "até" : "encerrada em"} ${when(o.retainUntil)}`);
+  }
+  if (o.legalHold) parts.push("retenção legal ativa");
+  if (!parts.length) return plain ? "" : chip("Sem retenção", "plain");
+  return plain ? parts.join(", ") : esc(parts.join(" · "));
+}
+
 async function objectDrawer(bucket, key) {
   const o = await api("GET", `/api/buckets/${enc(bucket)}/object?key=${enc(key)}`);
   const writable = state.bucket?.canWrite;
@@ -1004,18 +1017,25 @@ async function objectDrawer(bucket, key) {
       <div style="display:flex;gap:8px;flex-wrap:wrap"><a class="btn primary" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}">Baixar</a><button class="btn" id="drawer-share">Compartilhar</button></div>
       ${kv([["Caminho", `<code>${esc(key)}</code>`], ["Tamanho", `<span class="num">${size(o.size)}</span> <span class="faint num">(${o.size.toLocaleString("pt-BR")} bytes)</span>`], ["Tipo", esc(o.contentType)],
             ["Modificado em", when(o.lastModified)], ["ETag", `<code>${esc(o.etag)}</code>`], ["Partes", o.parts ? String(o.parts) : ""],
-            ["Criptografia", o.encrypted ? chip("AES-256 (SSE-S3)") : chip("Nenhuma", "plain")], ["No disco", o.diskPath ? `<code>${esc(o.diskPath)}</code>` : ""]])}
+            ["Criptografia", o.encrypted ? chip("AES-256 (SSE-S3)") : chip("Nenhuma", "plain")], ["No disco", o.diskPath ? `<code>${esc(o.diskPath)}</code>` : ""],
+            ["Retenção", o.objectLock ? lockText(o) : ""]])}
+      ${o.objectLock && writable ? `<div class="switch-row">${sw("legal-hold", o.legalHold, "Retenção legal (impede apagar esta versão até ser desligada)")}</div>` : ""}
       ${meta.length ? `<div><h3 style="margin-bottom:8px">Metadados</h3>${kv(meta.map(([k, v]) => [k, esc(v)]))}</div>` : ""}
       ${o.tags.length ? `<div><h3 style="margin-bottom:8px">Tags</h3><p>${o.tags.map(([k, v]) => chip(`${k} = ${v}`, "plain")).join(" ")}</p></div>` : ""}
       ${versioned ? `<div><h3 style="margin-bottom:8px">Versões</h3><ul class="versions">${o.versions.map(v => `<li>
-          <span><span class="num">${when(v.lastModified)}</span> ${v.isLatest ? chip("Atual", "ok") : ""}${v.deleteMarker ? chip("Marcador de exclusão", "warn") : ` <span class="faint num">${size(v.size)}</span>`}</span>
-          <span class="row-actions">${v.deleteMarker ? "" : `<a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}&versionId=${enc(v.versionId)}">Baixar</a>`}${writable ? `<button class="btn link danger" data-delver="${esc(v.versionId)}">Apagar</button>` : ""}</span></li>`).join("")}</ul></div>` : ""}
+          <span><span class="num">${when(v.lastModified)}</span> ${v.isLatest ? chip("Atual", "ok") : ""}${v.locked ? ` <span title="${esc(lockText(v, true))}">${chip("Protegida", "warn")}</span>` : ""}${v.deleteMarker ? chip("Marcador de exclusão", "warn") : ` <span class="faint num">${size(v.size)}</span>`}</span>
+          <span class="row-actions">${v.deleteMarker ? "" : `<a class="btn link" href="/api/buckets/${enc(bucket)}/download?key=${enc(key)}&versionId=${enc(v.versionId)}">Baixar</a>`}${writable && !v.locked ? `<button class="btn link danger" data-delver="${esc(v.versionId)}">Apagar</button>` : ""}</span></li>`).join("")}</ul></div>` : ""}
     </div>`;
   d.classList.add("open");
   d.setAttribute("aria-hidden", "false");
   $("#close-drawer").focus();
   $("#close-drawer").onclick = closeDrawer;
   $("#drawer-share").onclick = () => shareDialog(bucket, key);
+  const lh = $("#legal-hold");
+  if (lh) lh.onchange = async ev => {
+    try { await api("PUT", `/api/buckets/${enc(bucket)}/object/legal-hold?key=${enc(key)}&versionId=${enc(o.versionId)}`, { on: ev.target.checked }); toast(ev.target.checked ? "Retenção legal ativada." : "Retenção legal desativada."); objectDrawer(bucket, key); }
+    catch (e) { ev.target.checked = !ev.target.checked; fail(e); }
+  };
   const tp = $("#text-preview");
   if (tp) fetch(`/api/buckets/${enc(bucket)}/download?key=${enc(key)}&inline=1`, { credentials: "same-origin" })
     .then(r => r.text()).then(t => { tp.textContent = t.length > 20000 ? t.slice(0, 20000) + "\n…" : t; }).catch(() => { tp.textContent = "Não foi possível carregar."; });
@@ -1077,7 +1097,22 @@ async function settingsView(bucket) {
     ${bucketTabs(bucket, "settings")}
     ${can ? "" : '<div class="banner">Sua chave pode ver estas configurações, mas não alterá-las.</div>'}
     ${card({ title: "Versionamento", desc: "Guarda as versões anteriores de cada arquivo quando ele é substituído ou excluído, para que você possa recuperá-las." + (b.versioning === "Suspended" ? " As versões existentes continuam guardadas." : ""),
-      ctl: sw("versioning", b.versioning === "Enabled", versionLabel, !can) })}
+      ctl: sw("versioning", b.versioning === "Enabled", b.objectLock ? "Ativado (exigido pelo Object Lock)" : versionLabel, !can || b.objectLock) })}
+    ${card({ title: "Object Lock (retenção)", desc: b.objectLock
+        ? "Versões protegidas não podem ser apagadas antes do fim do prazo, nem por quem tem a chave root. Em <b>Governança</b>, um administrador pode liberar enviando <code>x-amz-bypass-governance-retention</code>; em <b>Conformidade</b>, ninguém pode. A retenção padrão vale para os arquivos novos que não informam a própria."
+        : "Protege documentos que precisam ser guardados por um prazo, como XML fiscal: as versões não podem ser apagadas antes do fim da retenção. Ativar é <b>permanente</b> e liga o versionamento.",
+      ctl: b.objectLock ? chip("Ativado", "warn") : chip("Desativado", "plain"),
+      body: b.objectLock ? `<div class="row-box trio">
+          <div class="field"><label for="lock-mode">Retenção padrão</label><select id="lock-mode" ${dis}>
+            <option value="" ${!b.lockDefault ? "selected" : ""}>Nenhuma</option>
+            <option value="GOVERNANCE" ${b.lockDefault?.mode === "GOVERNANCE" ? "selected" : ""}>Governança</option>
+            <option value="COMPLIANCE" ${b.lockDefault?.mode === "COMPLIANCE" ? "selected" : ""}>Conformidade</option></select></div>
+          <div class="field"><label for="lock-n">Prazo</label><input id="lock-n" type="number" min="1" value="${b.lockDefault?.years || b.lockDefault?.days || ""}" ${dis}></div>
+          <div class="field"><label for="lock-unit">Unidade</label><select id="lock-unit" ${dis}>
+            <option value="days" ${b.lockDefault?.days ? "selected" : ""}>dias</option>
+            <option value="years" ${b.lockDefault?.years || !b.lockDefault ? "selected" : ""}>anos</option></select></div>
+        </div>` : "",
+      foot: can ? (b.objectLock ? '<button class="btn primary" id="save-lock">Salvar retenção padrão</button>' : '<button class="btn" id="enable-lock">Ativar Object Lock</button>') : "" })}
     ${card({ title: "Arquivos legíveis no disco", desc: `Cada arquivo também aparece com o nome real em <code>${esc(b.readablePath)}</code>, para abrir, copiar ou fazer backup sem o BoxSpace. São só para leitura: alterações feitas direto no disco não voltam para o bucket.${b.mode === "erasure" ? " No modo erasure coding, eles são cópias completas e ocupam espaço extra no primeiro disco." : ""}`,
       ctl: sw("readable", b.readable, b.readable ? "Ativado" : "Desativado", !can) })}
     ${card({ title: "Criptografia", desc: "Novos arquivos são cifrados no disco com AES-256. Os arquivos já existentes não mudam." + (b.readable ? " Para ativar, desligue antes os arquivos legíveis no disco." : ""),
@@ -1107,6 +1142,16 @@ async function settingsView(bucket) {
     catch (e) { ev.target.checked = !ev.target.checked; fail(e); }
   };
   toggle("#versioning", "versioning", "Versionamento ativado.", "Versionamento suspenso.");
+  const saveLock = async (msg) => {
+    const mode = $("#lock-mode")?.value || "", n = +($("#lock-n")?.value || 0), unit = $("#lock-unit")?.value;
+    if (mode === "COMPLIANCE" && !await confirmDlg("Retenção em conformidade", `Os arquivos novos de <b>${esc(bucket)}</b> ficarão impossíveis de apagar por ${n} ${unit === "years" ? "ano(s)" : "dia(s)"}, inclusive pelo administrador. Não há como desfazer para os arquivos já gravados.`, "Usar conformidade")) return;
+    try { await api("PUT", `${bp}/object-lock`, mode ? { mode, [unit]: n } : {}); toast(msg); render(); } catch (e) { fail(e); }
+  };
+  $("#save-lock")?.addEventListener("click", () => saveLock("Retenção padrão salva."));
+  $("#enable-lock")?.addEventListener("click", async () => {
+    if (!await confirmDlg("Ativar Object Lock", `O Object Lock e o versionamento de <b>${esc(bucket)}</b> ficarão ativos para sempre. Depois, defina a retenção padrão.`, "Ativar")) return;
+    try { await api("PUT", `${bp}/object-lock`, {}); toast("Object Lock ativado."); render(); } catch (e) { fail(e); }
+  });
   toggle("#encryption", "encryption", "Criptografia ativada.", "Criptografia desativada.");
   $("#readable").onchange = async ev => {
     const on = ev.target.checked;

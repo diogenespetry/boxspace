@@ -25,7 +25,7 @@ use crate::{
     auth::{self, AuthInfo, Payload},
     blob, body, cors,
     error::{Result, S3Error},
-    lifecycle, listing,
+    lifecycle, listing, objlock,
     ops::{self, PutOpts, DEFAULT_CONTENT_TYPE},
     policy,
     replication::REPLICA_HEADER,
@@ -260,6 +260,8 @@ fn op_name(parts: &Parts, target: &Target) -> &'static str {
                 ("GET", Some("acl")) => "GetBucketAcl",
                 ("PUT", Some("acl")) => "PutBucketAcl",
                 ("GET", Some("location")) => "GetBucketLocation",
+                ("GET", Some("object-lock")) => "GetObjectLockConfiguration",
+                ("PUT", Some("object-lock")) => "PutObjectLockConfiguration",
                 (_, Some(_)) => "BucketConfig",
                 ("GET", None) if has("uploads") => "ListMultipartUploads",
                 ("GET", None) if has("versions") => "ListObjectVersions",
@@ -276,10 +278,14 @@ fn op_name(parts: &Parts, target: &Target) -> &'static str {
             "GET" if has("tagging") => "GetObjectTagging",
             "GET" if has("uploadId") => "ListParts",
             "GET" if has("acl") => "GetObjectAcl",
+            "GET" if has("retention") => "GetObjectRetention",
+            "GET" if has("legal-hold") => "GetObjectLegalHold",
             "GET" => "GetObject",
             "HEAD" => "HeadObject",
             "PUT" if has("tagging") => "PutObjectTagging",
             "PUT" if has("acl") => "PutObjectAcl",
+            "PUT" if has("retention") => "PutObjectRetention",
+            "PUT" if has("legal-hold") => "PutObjectLegalHold",
             "PUT" if has("uploadId") && parts.headers.contains_key("x-amz-copy-source") => "UploadPartCopy",
             "PUT" if has("uploadId") => "UploadPart",
             "PUT" if parts.headers.contains_key("x-amz-copy-source") => "CopyObject",
@@ -386,6 +392,11 @@ impl Ctx<'_> {
         }
     }
 
+    /// `x-amz-bypass-governance-retention: true` from an administrator key.
+    fn bypass_governance(&self) -> bool {
+        self.h(objlock::BYPASS_HEADER).is_some_and(|v| v.eq_ignore_ascii_case("true")) && self.auth.identity.as_ref().is_some_and(|i| i.admin())
+    }
+
     async fn read_body(&self, body: Body) -> Result<Vec<u8>> {
         body::read_all(stream(body), &self.auth.payload, MAX_XML).await
     }
@@ -477,13 +488,6 @@ fn check_acl(ctx: &Ctx<'_>) -> Result<()> {
     }
     if ctx.headers.keys().any(|k| k.as_str().starts_with("x-amz-grant-")) {
         return Err(S3Error::not_implemented("ACL grants are not supported. Use a bucket policy."));
-    }
-    Ok(())
-}
-
-fn reject_object_lock(ctx: &Ctx<'_>) -> Result<()> {
-    if ctx.headers.keys().any(|k| k.as_str().starts_with("x-amz-object-lock-")) {
-        return Err(S3Error::not_implemented("Object Lock is not supported."));
     }
     Ok(())
 }
@@ -599,6 +603,7 @@ fn put_opts(ctx: &Ctx<'_>) -> Result<PutOpts> {
         o.tags = parse_tag_header(t)?;
     }
     o.encrypt = sse_header(ctx)?;
+    o.lock = objlock::spec_from_headers(&ctx.headers)?;
     o.content_md5 = ctx.h("content-md5").map(str::to_string);
     if !matches!(ctx.auth.payload, Payload::Streaming { .. }) {
         o.crc32 = ctx.h("x-amz-checksum-crc32").map(str::to_string);
@@ -630,6 +635,7 @@ fn object_headers(h: &mut HeaderMap, v: &ObjectVersion) {
     if let Some(p) = v.parts {
         set_header(h, "x-amz-mp-parts-count", &p.to_string());
     }
+    objlock::set_headers(h, v);
 }
 
 fn parse_range(r: &str, size: u64) -> Result<Option<(u64, u64)>> {
@@ -871,8 +877,11 @@ fn bucket_get(ctx: &Ctx<'_>, b: &str) -> Result<Response> {
     }
     if q.has("object-lock") {
         ctx.authorize("s3:GetBucketObjectLockConfiguration", b, None)?;
-        s.bucket(b)?;
-        return Err(S3Error::new("ObjectLockConfigurationNotFoundError", 404, "Object Lock configuration does not exist for this bucket").resource(b));
+        let bm = s.bucket(b)?;
+        if !bm.object_lock {
+            return Err(objlock::not_configured().resource(b));
+        }
+        return xml(objlock::config_xml(&bm));
     }
     if q.has("notification") {
         ctx.authorize("s3:GetBucketNotification", b, None)?;
@@ -1106,6 +1115,13 @@ async fn bucket_put(ctx: &Ctx<'_>, b: &str, body: Body) -> Result<Response> {
             _ => return Err(S3Error::new("IllegalVersioningConfigurationException", 400, "The Versioning element must be specified")),
         };
         s.update_bucket(b, |m| {
+            if m.object_lock && st != "Enabled" {
+                return Err(S3Error::new(
+                    "InvalidBucketState",
+                    409,
+                    "An Object Lock configuration is present on this bucket, so the versioning state cannot be changed.",
+                ));
+            }
             m.versioning = Some(st);
             Ok(())
         })?;
@@ -1175,7 +1191,21 @@ async fn bucket_put(ctx: &Ctx<'_>, b: &str, body: Body) -> Result<Response> {
         return Err(S3Error::not_implemented("Configure event notifications as webhooks in the BoxSpace console."));
     }
     if q.has("object-lock") {
-        return Err(S3Error::not_implemented("Object Lock is not supported."));
+        ctx.authorize_owner(b)?;
+        let default = objlock::parse_config(&ctx.read_body(body).await?)?;
+        s.update_bucket(b, |m| {
+            if !m.object_lock && !m.versioning_enabled() {
+                return Err(S3Error::new(
+                    "InvalidBucketState",
+                    409,
+                    "Versioning must be 'Enabled' on the bucket to apply a Object Lock configuration",
+                ));
+            }
+            m.object_lock = true;
+            m.lock_default = default;
+            Ok(())
+        })?;
+        return Ok(status(200));
     }
     if let Some(k) = UNSUPPORTED_BUCKET.iter().find(|k| q.has(k)) {
         return Err(S3Error::not_implemented(format!("The bucket subresource '{k}' is not supported.")));
@@ -1190,11 +1220,16 @@ async fn bucket_put(ctx: &Ctx<'_>, b: &str, body: Body) -> Result<Response> {
         _ => return Err(S3Error::access_denied()),
     }
     check_acl(ctx)?;
-    if ctx.h("x-amz-bucket-object-lock-enabled") == Some("true") {
-        return Err(S3Error::not_implemented("Object Lock is not supported."));
-    }
+    let lock = ctx.h("x-amz-bucket-object-lock-enabled").is_some_and(|v| v.eq_ignore_ascii_case("true"));
     let _ = ctx.read_body(body).await?; // CreateBucketConfiguration (ignored)
     s.create_bucket(b)?;
+    if lock {
+        s.update_bucket(b, |m| {
+            m.object_lock = true;
+            m.versioning = Some("Enabled".into());
+            Ok(())
+        })?;
+    }
     let mut r = status(200);
     set_header(r.headers_mut(), "location", &format!("/{b}"));
     Ok(r)
@@ -1259,7 +1294,7 @@ async fn delete_objects(ctx: &Ctx<'_>, b: &str, body: Body) -> Result<Response> 
         let vid = o.version_id.as_deref().filter(|v| !v.is_empty());
         let action = if vid.is_some() { "s3:DeleteObjectVersion" } else { "s3:DeleteObject" };
         let res = match ctx.authorize(action, b, Some(&o.key)).and_then(|_| ops::check_key(&o.key)) {
-            Ok(()) => ops::delete_object(ctx.app, &bm, &o.key, vid, ctx.replica).await,
+            Ok(()) => ops::delete_object_with(ctx.app, &bm, &o.key, vid, ctx.replica, ctx.bypass_governance()).await,
             Err(e) => Err(e),
         };
         match res {
@@ -1296,12 +1331,16 @@ async fn delete_objects(ctx: &Ctx<'_>, b: &str, body: Body) -> Result<Response> 
 
 async fn object_op(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Response> {
     let q = &ctx.q;
-    let unsupported = ["attributes", "torrent", "retention", "legal-hold", "restore", "select"];
+    let unsupported = ["attributes", "torrent", "restore", "select"];
     if let Some(s) = unsupported.iter().find(|s| q.has(s)) {
         return Err(S3Error::not_implemented(format!("The object subresource '{s}' is not supported.")));
     }
     match ctx.method {
         Method::GET if q.has("tagging") => get_object_tagging(ctx, b, k),
+        Method::GET if q.has("retention") => get_retention(ctx, b, k),
+        Method::GET if q.has("legal-hold") => get_legal_hold(ctx, b, k),
+        Method::PUT if q.has("retention") => put_retention(ctx, b, k, body).await,
+        Method::PUT if q.has("legal-hold") => put_legal_hold(ctx, b, k, body).await,
         Method::GET if q.has("uploadId") => list_parts(ctx, b, k),
         Method::GET if q.has("acl") => {
             ctx.authorize("s3:GetObjectAcl", b, Some(k))?;
@@ -1387,7 +1426,6 @@ async fn put_object(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Respo
     ops::check_key(k)?;
     ctx.app.store.bucket(b)?;
     check_acl(ctx)?;
-    reject_object_lock(ctx)?;
     let mut opts = put_opts(ctx)?;
     opts.replica = ctx.replica;
     // Conditional writes.
@@ -1421,7 +1459,6 @@ async fn copy_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
     ctx.authorize("s3:PutObject", b, Some(k))?;
     ops::check_key(k)?;
     check_acl(ctx)?;
-    reject_object_lock(ctx)?;
     let dest = ctx.app.store.bucket(b)?;
     let src = copy_source_version(ctx, &sb, &sk, svid.as_deref())?;
     let directive = ctx.h("x-amz-metadata-directive").unwrap_or("COPY");
@@ -1430,6 +1467,7 @@ async fn copy_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
         return Err(S3Error::invalid_argument("Unknown metadata directive."));
     }
     let req = put_opts(ctx)?;
+    objlock::check_spec(&dest, &req.lock)?;
     if sb == b && sk == k && svid.is_none() && directive == "COPY" && req.encrypt.is_none() {
         return Err(S3Error::invalid_request(
             "This copy request is illegal because it is trying to copy an object to itself without changing the object's metadata, storage class, website redirect location or encryption attributes.",
@@ -1442,7 +1480,7 @@ async fn copy_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
     } else {
         (src.content_type.clone(), src.meta.clone(), src.headers.clone())
     };
-    let v = ObjectVersion {
+    let mut v = ObjectVersion {
         key: k.to_string(),
         size: blob.size,
         etag: hex::encode(md5),
@@ -1454,6 +1492,8 @@ async fn copy_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
         blob: Some(blob),
         ..Default::default()
     };
+    // Lock settings are never copied from the source (as in S3).
+    objlock::apply(&dest, &req.lock, &mut v);
     let stored = ops::commit_version(ctx.app, &dest, v, "ObjectCreated:Copy", ctx.replica).await?;
     let mut r = xml(format!(
         "<CopyObjectResult xmlns=\"{S3_NS}\"><LastModified>{}</LastModified><ETag>{}</ETag></CopyObjectResult>",
@@ -1508,7 +1548,7 @@ async fn delete_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
     ctx.authorize(if vid.is_some() { "s3:DeleteObjectVersion" } else { "s3:DeleteObject" }, b, Some(k))?;
     ops::check_key(k)?;
     let bm = ctx.app.store.bucket(b)?;
-    let out = ops::delete_object(ctx.app, &bm, k, vid, ctx.replica).await?;
+    let out = ops::delete_object_with(ctx.app, &bm, k, vid, ctx.replica, ctx.bypass_governance()).await?;
     let mut r = status(204);
     if let Some(v) = &out.version_id {
         set_header(r.headers_mut(), "x-amz-version-id", v);
@@ -1516,6 +1556,63 @@ async fn delete_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
     if out.delete_marker {
         set_header(r.headers_mut(), "x-amz-delete-marker", "true");
     }
+    Ok(r)
+}
+
+// -------------------------------------------------------- object lock ----
+
+fn get_retention(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
+    let vid = ctx.q.get("versionId").filter(|v| !v.is_empty());
+    ctx.authorize("s3:GetObjectRetention", b, Some(k))?;
+    objlock::require_enabled(&ctx.app.store.bucket(b)?)?;
+    let v = lookup_version(ctx, b, k, vid)?;
+    let body = objlock::retention_xml(&v)
+        .ok_or_else(|| S3Error::new("NoSuchObjectLockConfiguration", 404, "The specified object does not have a ObjectLock configuration"))?;
+    xml(body)
+}
+
+async fn put_retention(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Response> {
+    let vid = ctx.q.get("versionId").filter(|v| !v.is_empty());
+    ctx.authorize("s3:PutObjectRetention", b, Some(k))?;
+    objlock::require_enabled(&ctx.app.store.bucket(b)?)?;
+    lookup_version(ctx, b, k, vid)?;
+    let (mode, until) = objlock::parse_retention(&ctx.read_body(body).await?)?;
+    let bypass = ctx.bypass_governance();
+    let v = ops::update_lock(ctx.app, b, k, vid, |v| {
+        objlock::check_retention_change(v, mode.as_deref(), until, bypass, Utc::now())?;
+        v.lock_mode = mode;
+        v.retain_until = until;
+        Ok(())
+    })
+    .await?
+    .ok_or_else(|| S3Error::no_such_key(k))?;
+    let mut r = status(200);
+    version_header(&mut r, &v.version_id);
+    Ok(r)
+}
+
+fn get_legal_hold(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
+    let vid = ctx.q.get("versionId").filter(|v| !v.is_empty());
+    ctx.authorize("s3:GetObjectLegalHold", b, Some(k))?;
+    objlock::require_enabled(&ctx.app.store.bucket(b)?)?;
+    let v = lookup_version(ctx, b, k, vid)?;
+    xml(objlock::legal_hold_xml(v.legal_hold))
+}
+
+async fn put_legal_hold(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Response> {
+    let vid = ctx.q.get("versionId").filter(|v| !v.is_empty());
+    ctx.authorize("s3:PutObjectLegalHold", b, Some(k))?;
+    objlock::require_enabled(&ctx.app.store.bucket(b)?)?;
+    lookup_version(ctx, b, k, vid)?;
+    let on = objlock::parse_legal_hold(&ctx.read_body(body).await?)?;
+    let v = ops::update_lock(ctx.app, b, k, vid, |v| {
+        v.legal_hold = on;
+        Ok(())
+    })
+    .await?
+    .ok_or_else(|| S3Error::no_such_key(k))?;
+    let mut r = status(200);
+    version_header(&mut r, &v.version_id);
     Ok(r)
 }
 
@@ -1531,8 +1628,8 @@ fn create_upload(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
     ops::check_key(k)?;
     let bm = ctx.app.store.bucket(b)?;
     check_acl(ctx)?;
-    reject_object_lock(ctx)?;
     let o = put_opts(ctx)?;
+    objlock::check_spec(&bm, &o.lock)?;
     let id = format!("{}{}", uuid::Uuid::new_v4().simple(), random_hex(8));
     let u = UploadMeta {
         upload_id: id.clone(),
@@ -1545,6 +1642,7 @@ fn create_upload(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
         tags: o.tags,
         encrypt: o.encrypt.unwrap_or(bm.encryption),
         parts: BTreeMap::new(),
+        lock: o.lock,
     };
     ctx.app.store.put_upload(&u)?;
     let mut r = xml(format!(
@@ -1691,7 +1789,7 @@ async fn complete_upload(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<
             blob::remove_blob(ctx.app, b, &p.blob).await;
         }
     }
-    let v = ObjectVersion {
+    let mut v = ObjectVersion {
         key: k.to_string(),
         size: chosen.iter().map(|p| p.size).sum(),
         etag,
@@ -1704,6 +1802,7 @@ async fn complete_upload(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<
         parts: Some(chosen.len() as u32),
         ..Default::default()
     };
+    objlock::apply(&bm, &claimed.lock, &mut v);
     let stored = ops::commit_version(ctx.app, &bm, v, "ObjectCreated:CompleteMultipartUpload", ctx.replica).await?;
     let mut r = xml(format!(
         "<CompleteMultipartUploadResult xmlns=\"{S3_NS}\"><Location>{}</Location><Bucket>{}</Bucket><Key>{}</Key><ETag>{}</ETag></CompleteMultipartUploadResult>",

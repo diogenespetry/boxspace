@@ -99,6 +99,13 @@ pub struct ObjectVersion {
     /// Multipart data, in order (no copy is made on completion).
     pub segments: Vec<BlobRef>,
     pub parts: Option<u32>,
+    /// Object Lock retention: "GOVERNANCE" or "COMPLIANCE".
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub lock_mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub retain_until: Option<DateTime<Utc>>,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub legal_hold: bool,
 }
 
 impl ObjectVersion {
@@ -142,6 +149,9 @@ pub struct BucketMeta {
     pub readable: bool,
     pub webhooks: Vec<Webhook>,
     pub replication: Vec<ReplTarget>,
+    /// Object Lock enabled (permanent; implies versioning stays enabled).
+    pub object_lock: bool,
+    pub lock_default: Option<crate::objlock::DefaultRetention>,
 }
 
 impl BucketMeta {
@@ -171,6 +181,7 @@ pub struct UploadMeta {
     pub tags: Vec<(String, String)>,
     pub encrypt: bool,
     pub parts: BTreeMap<u32, PartMeta>,
+    pub lock: crate::objlock::LockSpec,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -502,6 +513,7 @@ impl Store {
                 v.version_id = NULL_VERSION.to_string();
                 for (k, old) in versions_of(&objs, bucket, &v.key)? {
                     if old.version_id == NULL_VERSION {
+                        crate::objlock::check_delete(&old, false, Utc::now())?;
                         objs.remove(k.as_slice())?;
                         replaced.push(old);
                     }
@@ -552,7 +564,9 @@ impl Store {
         Ok(versions_of(&t, bucket, key)?.into_iter().map(|(_, v)| v).collect())
     }
 
-    pub fn delete_object(&self, bucket: &str, key: &str, version_id: Option<&str>) -> Result<DeleteOutcome> {
+    /// Delete a version (`version_id`) or the current object. Versions
+    /// protected by Object Lock are refused (see `objlock::check_delete`).
+    pub fn delete_object(&self, bucket: &str, key: &str, version_id: Option<&str>, bypass_governance: bool) -> Result<DeleteOutcome> {
         let tx = self.db.begin_write()?;
         let mut out = DeleteOutcome::default();
         {
@@ -567,6 +581,7 @@ impl Store {
             match version_id {
                 Some(id) => {
                     if let Some((k, v)) = versions.into_iter().find(|(_, v)| v.version_id == id) {
+                        crate::objlock::check_delete(&v, bypass_governance, Utc::now())?;
                         objs.remove(k.as_slice())?;
                         out.delete_marker = v.delete_marker;
                         out.removed.push(v);
@@ -584,6 +599,7 @@ impl Store {
                     if !bm.versioning_enabled() {
                         for (k, v) in versions {
                             if v.version_id == NULL_VERSION {
+                                crate::objlock::check_delete(&v, bypass_governance, Utc::now())?;
                                 objs.remove(k.as_slice())?;
                                 out.removed.push(v);
                             }
@@ -636,6 +652,34 @@ impl Store {
                     f(&mut v);
                     objs.insert(k.as_slice(), ser(&v).as_slice())?;
                 }
+                result = Some(v);
+            }
+        }
+        tx.commit()?;
+        Ok(result)
+    }
+
+    /// Like `update_version`, but the change can be refused (checked inside
+    /// the same transaction). Returns None if the version does not exist.
+    pub fn try_update_version<F>(&self, bucket: &str, key: &str, version_id: Option<&str>, f: F) -> Result<Option<ObjectVersion>>
+    where
+        F: FnOnce(&mut ObjectVersion) -> Result<()>,
+    {
+        let tx = self.db.begin_write()?;
+        let mut result = None;
+        {
+            let mut objs = tx.open_table(OBJECTS)?;
+            let versions = versions_of(&objs, bucket, key)?;
+            let found = match version_id {
+                None => versions.into_iter().next(),
+                Some(id) => versions.into_iter().find(|(_, v)| v.version_id == id),
+            };
+            if let Some((k, mut v)) = found {
+                if v.delete_marker {
+                    return Err(S3Error::method_not_allowed());
+                }
+                f(&mut v)?;
+                objs.insert(k.as_slice(), ser(&v).as_slice())?;
                 result = Some(v);
             }
         }

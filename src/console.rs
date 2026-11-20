@@ -67,7 +67,13 @@ impl From<S3Error> for ApiError {
             "BucketNotEmpty" => "O bucket não está vazio.".to_string(),
             "BucketAlreadyOwnedByYou" => "Já existe um bucket com esse nome.".to_string(),
             "NoSuchKey" => "Objeto não encontrado.".to_string(),
+            "AccessDenied" if e.message.contains("object lock") => {
+                "Protegido por Object Lock: a versão tem retenção legal ou um prazo de retenção que ainda não terminou.".to_string()
+            }
             "AccessDenied" => "Acesso negado.".to_string(),
+            "InvalidBucketState" if e.message.contains("Object Lock") => {
+                "Com o Object Lock ativo, o versionamento não pode ser suspenso.".to_string()
+            }
             "KeyTooLongError" => "O nome do objeto é longo demais (máx. 1024 bytes).".to_string(),
             "MalformedPolicy" => format!("Política inválida: {}", e.message),
             "SlowDown" => "Não há discos online suficientes para concluir a operação.".to_string(),
@@ -168,6 +174,8 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/buckets/{b}", get(bucket_get).delete(bucket_delete))
         .route("/api/buckets/{b}/versioning", put(bucket_versioning))
         .route("/api/buckets/{b}/encryption", put(bucket_encryption))
+        .route("/api/buckets/{b}/object-lock", put(bucket_object_lock))
+        .route("/api/buckets/{b}/object/legal-hold", put(object_legal_hold))
         .route("/api/buckets/{b}/readable", put(bucket_readable))
         .route("/api/buckets/{b}/policy", put(bucket_policy))
         .route("/api/buckets/{b}/lifecycle", put(bucket_lifecycle))
@@ -448,6 +456,7 @@ async fn buckets_list(State(app): State<Arc<App>>, a: Auth) -> R<Json<Value>> {
             "versioning": b.versioning,
             "encryption": b.encryption,
             "readable": b.readable,
+            "objectLock": b.object_lock,
             "replicated": b.replication.iter().any(|t| t.enabled),
             "public": is_public(&b.name, b.policy.as_deref()),
             "objects": s.objects,
@@ -463,6 +472,8 @@ struct CreateReq {
     name: String,
     #[serde(default)]
     readable: bool,
+    #[serde(default, rename = "objectLock")]
+    object_lock: bool,
 }
 
 async fn bucket_create(State(app): State<Arc<App>>, a: Auth, Json(req): Json<CreateReq>) -> R<Json<Value>> {
@@ -474,6 +485,13 @@ async fn bucket_create(State(app): State<Arc<App>>, a: Auth, Json(req): Json<Cre
         ));
     }
     app.store.create_bucket(name)?;
+    if req.object_lock {
+        app.store.update_bucket(name, |m| {
+            m.object_lock = true;
+            m.versioning = Some("Enabled".into());
+            Ok(())
+        })?;
+    }
     if req.readable {
         app.store.update_bucket(name, |m| {
             m.readable = true;
@@ -541,6 +559,8 @@ async fn bucket_get(State(app): State<Arc<App>>, a: Auth, Path(b): Path<String>)
         "versioning": bm.versioning,
         "encryption": bm.encryption,
         "readable": bm.readable,
+        "objectLock": bm.object_lock,
+        "lockDefault": bm.lock_default,
         "readablePath": view::bucket_root(&app, &b).display().to_string(),
         "policyMode": match bm.policy.as_deref() {
             None => "private",
@@ -574,11 +594,59 @@ async fn bucket_versioning(State(app): State<Arc<App>>, a: Auth, Path(b): Path<S
     app.store.update_bucket(&b, |m| {
         if req.enabled {
             m.versioning = Some("Enabled".into());
+        } else if m.object_lock {
+            return Err(S3Error::new("InvalidBucketState", 409, "Object Lock is enabled, so versioning cannot be suspended."));
         } else if m.versioning.is_some() {
             m.versioning = Some("Suspended".into());
         }
         Ok(())
     })?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct ObjectLockReq {
+    /// Empty = no default retention.
+    #[serde(default)]
+    mode: String,
+    days: Option<u32>,
+    years: Option<u32>,
+}
+
+/// Enable Object Lock (permanent; turns versioning on) and set the default retention.
+async fn bucket_object_lock(State(app): State<Arc<App>>, a: Auth, Path(b): Path<String>, Json(req): Json<ObjectLockReq>) -> R<Json<Value>> {
+    a.admin()?;
+    let default = if req.mode.is_empty() {
+        None
+    } else {
+        let d = crate::objlock::DefaultRetention { mode: req.mode, days: req.days.filter(|d| *d > 0), years: req.years.filter(|y| *y > 0) };
+        d.validate().map_err(|_| bad("Retenção padrão inválida: escolha o modo e informe dias (1 a 36.500) ou anos (1 a 100), não os dois."))?;
+        Some(d)
+    };
+    app.store.update_bucket(&b, |m| {
+        m.object_lock = true;
+        m.versioning = Some("Enabled".into());
+        m.lock_default = default;
+        Ok(())
+    })?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct LegalHoldReq {
+    on: bool,
+}
+
+async fn object_legal_hold(State(app): State<Arc<App>>, a: Auth, Path(b): Path<String>, Query(q): Query<KeyQ>, Json(req): Json<LegalHoldReq>) -> R<Json<Value>> {
+    a.write(&b)?;
+    crate::objlock::require_enabled(&app.store.bucket(&b)?)?;
+    let vid = q.version_id.as_deref().filter(|v| !v.is_empty());
+    ops::update_lock(&app, &b, &q.key, vid, |v| {
+        v.legal_hold = req.on;
+        Ok(())
+    })
+    .await?
+    .ok_or_else(|| ApiError::from(S3Error::no_such_key(&q.key)))?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -900,14 +968,20 @@ async fn object_info(State(app): State<Arc<App>>, a: Auth, Path(b): Path<String>
     info["tags"] = json!(cur.tags);
     info["versionId"] = json!(cur.version_id);
     info["parts"] = json!(cur.parts);
+    info["lockMode"] = json!(cur.lock_mode);
+    info["retainUntil"] = json!(cur.retain_until);
+    info["legalHold"] = json!(cur.legal_hold);
+    info["objectLock"] = json!(bm.object_lock);
     if bm.readable && !cur.encrypted() {
         info["diskPath"] = json!(view::view_path(&app, &b, &q.key).map(|p| p.display().to_string()));
     }
+    let now = chrono::Utc::now();
     info["versions"] = versions
         .iter()
         .enumerate()
         .map(|(i, v)| {
-            json!({ "versionId": v.version_id, "size": v.size, "lastModified": v.last_modified, "deleteMarker": v.delete_marker, "isLatest": i == 0, "etag": v.etag })
+            json!({ "versionId": v.version_id, "size": v.size, "lastModified": v.last_modified, "deleteMarker": v.delete_marker, "isLatest": i == 0, "etag": v.etag,
+                "locked": crate::objlock::locked(v, now), "lockMode": v.lock_mode, "retainUntil": v.retain_until, "legalHold": v.legal_hold })
         })
         .collect();
     Ok(Json(info))
