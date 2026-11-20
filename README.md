@@ -137,6 +137,12 @@ Para guardar documentos que não podem ser apagados antes de um prazo, como XML 
 
 > Voltar para uma versão do BoxSpace anterior à 0.4.0 desliga a proteção, porque as versões antigas ignoram esses campos.
 
+## Cota por bucket
+
+Em **Configurações > Cota e uso**, cada bucket pode ter um limite de espaço (somando todas as versões) e/ou de número de arquivos. Ao atingir a cota, novos envios (PutObject, CopyObject, multipart e uploads do console) são recusados com `403 QuotaExceeded`, inclusive escritas que chegam por replicação. Quando o cliente informa o tamanho, a recusa acontece antes de receber os dados. Apagar arquivos e sobrescrever com dados menores continuam permitidos, e baixar a cota abaixo do uso atual não apaga nada.
+
+A mesma tela mostra o tráfego do bucket pela API desde que o servidor iniciou (requisições, erros, bytes recebidos e enviados).
+
 ## Chaves de acesso e permissões
 
 - **Root**: acesso total, inclusive ao gerenciamento de chaves e à auditoria.
@@ -175,7 +181,7 @@ As requisições recusadas aparecem na auditoria (`IpBlocked`, no máximo uma po
 |---|---|
 | `GET /_boxspace/health/live` | Processo vivo (sempre 200) |
 | `GET /_boxspace/health` | 200 se há discos suficientes para gravar, 503 se não; JSON com o estado dos discos |
-| `GET /_boxspace/metrics` | Métricas Prometheus: requisições por operação e status, latência, bytes, objetos e bytes por bucket, discos, verificação de integridade e fila de replicação |
+| `GET /_boxspace/metrics` | Métricas Prometheus: requisições por operação e status, latência, bytes, objetos e bytes por bucket, cota e tráfego por bucket (requisições, erros, bytes recebidos e enviados), discos, verificação de integridade e fila de replicação |
 
 As métricas exigem `Authorization: Bearer <BOXSPACE_METRICS_TOKEN>`, a menos que `BOXSPACE_METRICS_PUBLIC=1`. O comando `boxspace healthcheck [URL]` sai com código 0 se o servidor estiver saudável; a imagem Docker o usa como `HEALTHCHECK`.
 

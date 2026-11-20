@@ -76,6 +76,10 @@ impl From<S3Error> for ApiError {
             }
             "KeyTooLongError" => "O nome do objeto é longo demais (máx. 1024 bytes).".to_string(),
             "MalformedPolicy" => format!("Política inválida: {}", e.message),
+            "QuotaExceeded" => format!(
+                "A cota do bucket foi atingida ({}). Apague arquivos ou aumente a cota em Configurações.",
+                if e.message.contains("objects") { "número de arquivos" } else { "espaço" }
+            ),
             "SlowDown" => "Não há discos online suficientes para concluir a operação.".to_string(),
             "InternalError" => "Erro interno do servidor.".to_string(),
             _ => e.message,
@@ -175,6 +179,7 @@ pub fn router(app: Arc<App>) -> Router {
         .route("/api/buckets/{b}/versioning", put(bucket_versioning))
         .route("/api/buckets/{b}/encryption", put(bucket_encryption))
         .route("/api/buckets/{b}/object-lock", put(bucket_object_lock))
+        .route("/api/buckets/{b}/quota", put(bucket_quota))
         .route("/api/buckets/{b}/object/legal-hold", put(object_legal_hold))
         .route("/api/buckets/{b}/readable", put(bucket_readable))
         .route("/api/buckets/{b}/policy", put(bucket_policy))
@@ -457,6 +462,8 @@ async fn buckets_list(State(app): State<Arc<App>>, a: Auth) -> R<Json<Value>> {
             "encryption": b.encryption,
             "readable": b.readable,
             "objectLock": b.object_lock,
+            "quotaBytes": b.quota_bytes,
+            "quotaObjects": b.quota_objects,
             "replicated": b.replication.iter().any(|t| t.enabled),
             "public": is_public(&b.name, b.policy.as_deref()),
             "objects": s.objects,
@@ -561,6 +568,9 @@ async fn bucket_get(State(app): State<Arc<App>>, a: Auth, Path(b): Path<String>)
         "readable": bm.readable,
         "objectLock": bm.object_lock,
         "lockDefault": bm.lock_default,
+        "quotaBytes": bm.quota_bytes,
+        "quotaObjects": bm.quota_objects,
+        "traffic": app.metrics.bucket_traffic(&b),
         "readablePath": view::bucket_root(&app, &b).display().to_string(),
         "policyMode": match bm.policy.as_deref() {
             None => "private",
@@ -627,6 +637,23 @@ async fn bucket_object_lock(State(app): State<Arc<App>>, a: Auth, Path(b): Path<
         m.object_lock = true;
         m.versioning = Some("Enabled".into());
         m.lock_default = default;
+        Ok(())
+    })?;
+    Ok(Json(json!({ "ok": true })))
+}
+
+#[derive(Deserialize)]
+struct QuotaReq {
+    /// None or 0 = unlimited.
+    bytes: Option<u64>,
+    objects: Option<u64>,
+}
+
+async fn bucket_quota(State(app): State<Arc<App>>, a: Auth, Path(b): Path<String>, Json(req): Json<QuotaReq>) -> R<Json<Value>> {
+    a.admin()?;
+    app.store.update_bucket(&b, |m| {
+        m.quota_bytes = req.bytes.filter(|n| *n > 0);
+        m.quota_objects = req.objects.filter(|n| *n > 0);
         Ok(())
     })?;
     Ok(Json(json!({ "ok": true })))
@@ -991,6 +1018,7 @@ async fn object_upload(State(app): State<Arc<App>>, a: Auth, Path(b): Path<Strin
     a.write(&b)?;
     let opts = ops::PutOpts {
         content_type: header(&headers, "content-type").filter(|c| !c.is_empty()).map(str::to_string),
+        size_hint: header(&headers, "content-length").and_then(|v| v.parse().ok()),
         ..Default::default()
     };
     let stream = body.into_data_stream().map_err(std::io::Error::other);

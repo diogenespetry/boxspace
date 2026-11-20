@@ -751,8 +751,51 @@ def t_object_lock(srv, s3):
     assert err_code(s3.delete_object, Bucket="fiscal", Key="nfe/1.xml", VersionId=v1) == "AccessDenied"
 
 
+def t_quota(srv, s3):
+    c = console_session(srv)
+    s3.create_bucket(Bucket="cota")
+    assert c.put(f"{srv.curl}/api/buckets/cota/quota", json={"bytes": 10_000, "objects": 3}).status_code == 200
+    info = c.get(f"{srv.curl}/api/buckets/cota").json()
+    assert info["quotaBytes"] == 10_000 and info["quotaObjects"] == 3, info
+    s3.put_object(Bucket="cota", Key="a", Body=b"a" * 4000)
+    s3.put_object(Bucket="cota", Key="b", Body=b"b" * 4000)
+    # Over the byte quota: refused before the body is stored.
+    assert err_code(s3.put_object, Bucket="cota", Key="c", Body=b"c" * 4000) == "QuotaExceeded"
+    # Overwriting with smaller data (unversioned) frees space and is allowed.
+    s3.put_object(Bucket="cota", Key="a", Body=b"a" * 1000)
+    s3.put_object(Bucket="cota", Key="c", Body=b"c" * 1000)
+    # Object quota: a 4th object is refused, overwriting an existing one is not.
+    assert err_code(s3.put_object, Bucket="cota", Key="d", Body=b"d") == "QuotaExceeded"
+    s3.put_object(Bucket="cota", Key="c", Body=b"c" * 10)
+    # Copies and multipart uploads respect the quota too.
+    assert err_code(s3.copy_object, Bucket="cota", Key="d", CopySource={"Bucket": "cota", "Key": "b"}) == "QuotaExceeded"
+    up = s3.create_multipart_upload(Bucket="cota", Key="b")["UploadId"]
+    assert err_code(s3.upload_part, Bucket="cota", Key="b", UploadId=up, PartNumber=1, Body=b"x" * 20_000) == "QuotaExceeded"
+    s3.abort_multipart_upload(Bucket="cota", Key="b", UploadId=up)
+    # Deleting always works, then there is room again.
+    s3.delete_object(Bucket="cota", Key="b")
+    s3.put_object(Bucket="cota", Key="d", Body=b"d" * 3000)
+    # The console reports the error in Portuguese.
+    r = c.put(f"{srv.curl}/api/buckets/cota/object", params={"key": "e"}, data=b"e" * 50_000)
+    assert r.status_code == 403 and "cota" in r.json()["error"], r.text
+    # Lowering the quota below current usage keeps the data; removing it lifts the limit.
+    assert c.put(f"{srv.curl}/api/buckets/cota/quota", json={"bytes": 10, "objects": None}).status_code == 200
+    assert s3.get_object(Bucket="cota", Key="d")["Body"].read() == b"d" * 3000
+    assert c.put(f"{srv.curl}/api/buckets/cota/quota", json={"bytes": None, "objects": None}).status_code == 200
+    s3.put_object(Bucket="cota", Key="big", Body=b"z" * 50_000)
+    listed = {b["name"]: b for b in c.get(f"{srv.curl}/api/buckets").json()}
+    assert listed["cota"]["quotaBytes"] is None
+    # Per-bucket traffic: counted for real buckets, not for names probed anonymously.
+    requests.get(f"{srv.url}/naoexiste-scanner/.env")
+    t = c.get(f"{srv.curl}/api/buckets/cota").json()["traffic"]
+    assert t["requests"] >= 10 and t["errors"] >= 4 and t["bytesIn"] >= 50_000, t
+    m = requests.get(f"{srv.url}/_boxspace/metrics", headers={"Authorization": "Bearer metrics-token"}).text
+    assert 'boxspace_bucket_requests_total{bucket="cota"}' in m and 'boxspace_bucket_received_bytes_total{bucket="cota"}' in m
+    assert "naoexiste-scanner" not in m
+
+
 TESTS = [t_buckets, t_objects, t_special_keys, t_listing, t_copy, t_multipart, t_presigned, t_versioning, t_tagging,
-         t_policy, t_cors, t_encryption, t_lifecycle, t_auth, t_streaming, t_console, t_access_keys, t_webhooks, t_object_lock]
+         t_policy, t_cors, t_encryption, t_lifecycle, t_auth, t_streaming, t_console, t_access_keys, t_webhooks, t_object_lock, t_quota]
 
 
 def main():

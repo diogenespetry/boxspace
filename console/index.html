@@ -716,6 +716,20 @@ document.addEventListener("click", async ev => {
 document.addEventListener("keydown", ev => { if (ev.key === "Escape") closeDrawer(); });
 
 /* ---------- buckets ---------- */
+// Share of the quota in use (0..1+), or null without a quota.
+function quotaUse(b) {
+  const r = [];
+  if (b.quotaBytes) r.push(b.bytes / b.quotaBytes);
+  if (b.quotaObjects) r.push(b.objects / b.quotaObjects);
+  return r.length ? Math.max(...r) : null;
+}
+function usageCell(b, total) {
+  const q = quotaUse(b);
+  if (q == null) return `<div class="usage"><span class="num small">${size(b.bytes)}</span><div class="bar"><i style="width:${Math.max(b.bytes ? 2 : 0, b.bytes / total * 100)}%"></i></div></div>`;
+  const pct = Math.round(q * 100), cls = q >= 0.95 ? "bad" : q >= 0.8 ? "warn" : "";
+  const limit = [b.quotaBytes ? size(b.quotaBytes) : "", b.quotaObjects ? `${b.quotaObjects.toLocaleString("pt-BR")} obj.` : ""].filter(Boolean).join(" · ");
+  return `<div class="usage" title="Cota: ${esc(limit)}"><span class="num small">${size(b.bytes)} <span class="faint">· ${pct}% da cota</span></span><div class="bar ${cls}"><i style="width:${Math.min(100, Math.max(2, pct))}%"></i></div></div>`;
+}
 async function bucketsView() {
   const [buckets, info] = await Promise.all([api("GET", "/api/buckets"), api("GET", "/api/info")]);
   const admin = state.me.admin;
@@ -723,8 +737,8 @@ async function bucketsView() {
   const rows = buckets.map(b => `<tr>
       <td class="name"><a href="#/b/${enc(b.name)}"><span class="ficon">${icon("box")}</span>${esc(b.name)}</a></td>
       <td class="r num">${b.objects.toLocaleString("pt-BR")}<span class="sm-only faint"> objeto(s), ${size(b.bytes)}</span></td>
-      <td class="hide-sm"><div class="usage"><span class="num small">${size(b.bytes)}</span><div class="bar"><i style="width:${Math.max(b.bytes ? 2 : 0, b.bytes / total * 100)}%"></i></div></div></td>
-      <td class="wide">${b.public ? chip("Público", "warn") : ""}${b.versioning === "Enabled" ? chip("Versionado") : ""}${b.objectLock ? chip("Object Lock", "warn") : ""}${b.encryption ? chip("Criptografado") : ""}${b.readable ? chip("Arquivos legíveis", "ok") : ""}${b.replicated ? chip("Replicado") : ""}${b.writable ? "" : chip("Só leitura", "plain")}</td>
+      <td class="hide-sm">${usageCell(b, total)}</td>
+      <td class="wide">${b.public ? chip("Público", "warn") : ""}${b.versioning === "Enabled" ? chip("Versionado") : ""}${b.objectLock ? chip("Object Lock", "warn") : ""}${quotaUse(b) >= 1 ? chip("Cota cheia", "bad") : ""}${b.encryption ? chip("Criptografado") : ""}${b.readable ? chip("Arquivos legíveis", "ok") : ""}${b.replicated ? chip("Replicado") : ""}${b.writable ? "" : chip("Só leitura", "plain")}</td>
       <td><div class="row-actions"><a class="btn link" href="#/b/${enc(b.name)}/settings">Configurar</a>${admin ? `<button class="btn link danger" data-del="${esc(b.name)}" data-count="${b.objects}">Excluir</button>` : ""}</div></td>
     </tr>`).join("");
   $("#app").innerHTML = shell("buckets", `
@@ -1113,6 +1127,15 @@ async function settingsView(bucket) {
             <option value="years" ${b.lockDefault?.years || !b.lockDefault ? "selected" : ""}>anos</option></select></div>
         </div>` : "",
       foot: can ? (b.objectLock ? '<button class="btn primary" id="save-lock">Salvar retenção padrão</button>' : '<button class="btn" id="enable-lock">Ativar Object Lock</button>') : "" })}
+    ${card({ title: "Cota e uso", desc: "Limita o espaço (somando todas as versões) e o número de arquivos do bucket. Ao atingir a cota, novos envios são recusados com <code>QuotaExceeded</code>; apagar arquivos continua permitido. Deixe em branco para não limitar.",
+      ctl: quotaUse(b) == null ? chip("Sem cota", "plain") : quotaUse(b) >= 1 ? chip("Cota atingida", "bad") : chip(`${Math.round(quotaUse(b) * 100)}% em uso`, quotaUse(b) >= 0.8 ? "warn" : "ok"),
+      body: `<div class="row-box trio">
+          <div class="field"><label for="quota-gb">Espaço máximo (GB)</label><input id="quota-gb" type="number" min="0" step="0.1" value="${b.quotaBytes ? +(b.quotaBytes / 1073741824).toFixed(2) : ""}" placeholder="sem limite" ${dis}></div>
+          <div class="field"><label for="quota-obj">Máximo de arquivos</label><input id="quota-obj" type="number" min="0" value="${b.quotaObjects || ""}" placeholder="sem limite" ${dis}></div>
+          <div class="field"><label>Em uso agora</label><p class="num" style="margin-top:8px">${size(b.bytes)} · ${b.objects.toLocaleString("pt-BR")} arquivo(s)</p></div>
+        </div>
+        <p class="small faint" style="margin-top:10px">Tráfego pela API desde que o servidor iniciou: ${b.traffic.requests.toLocaleString("pt-BR")} requisição(ões) (${b.traffic.errors.toLocaleString("pt-BR")} com erro), ${size(b.traffic.bytesIn) || "0 B"} recebidos, ${size(b.traffic.bytesOut) || "0 B"} enviados. Métricas por bucket também em <code>/_boxspace/metrics</code>.</p>`,
+      foot: can ? '<button class="btn primary" id="save-quota">Salvar cota</button>' : "" })}
     ${card({ title: "Arquivos legíveis no disco", desc: `Cada arquivo também aparece com o nome real em <code>${esc(b.readablePath)}</code>, para abrir, copiar ou fazer backup sem o BoxSpace. São só para leitura: alterações feitas direto no disco não voltam para o bucket.${b.mode === "erasure" ? " No modo erasure coding, eles são cópias completas e ocupam espaço extra no primeiro disco." : ""}`,
       ctl: sw("readable", b.readable, b.readable ? "Ativado" : "Desativado", !can) })}
     ${card({ title: "Criptografia", desc: "Novos arquivos são cifrados no disco com AES-256. Os arquivos já existentes não mudam." + (b.readable ? " Para ativar, desligue antes os arquivos legíveis no disco." : ""),
@@ -1146,6 +1169,14 @@ async function settingsView(bucket) {
     const mode = $("#lock-mode")?.value || "", n = +($("#lock-n")?.value || 0), unit = $("#lock-unit")?.value;
     if (mode === "COMPLIANCE" && !await confirmDlg("Retenção em conformidade", `Os arquivos novos de <b>${esc(bucket)}</b> ficarão impossíveis de apagar por ${n} ${unit === "years" ? "ano(s)" : "dia(s)"}, inclusive pelo administrador. Não há como desfazer para os arquivos já gravados.`, "Usar conformidade")) return;
     try { await api("PUT", `${bp}/object-lock`, mode ? { mode, [unit]: n } : {}); toast(msg); render(); } catch (e) { fail(e); }
+  };
+  $("#save-quota").onclick = async () => {
+    const gb = parseFloat($("#quota-gb").value), n = parseInt($("#quota-obj").value, 10);
+    const bytes = gb > 0 ? Math.round(gb * 1073741824) : null, objects = n > 0 ? n : null;
+    if ((bytes && bytes < b.bytes) || (objects && objects < b.objects)) {
+      if (!await confirmDlg("Cota abaixo do uso atual", "O bucket já passa dessa cota. Os arquivos atuais continuam guardados, mas novos envios serão recusados até liberar espaço.", "Salvar mesmo assim")) return;
+    }
+    try { await api("PUT", `${bp}/quota`, { bytes, objects }); toast(bytes || objects ? "Cota salva." : "Cota removida."); render(); } catch (e) { fail(e); }
   };
   $("#save-lock")?.addEventListener("click", () => saveLock("Retenção padrão salva."));
   $("#enable-lock")?.addEventListener("click", async () => {

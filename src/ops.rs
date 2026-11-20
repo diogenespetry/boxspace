@@ -37,6 +37,26 @@ pub struct PutOpts {
     pub replica: bool,
     /// Object Lock settings from the request (bucket default otherwise).
     pub lock: crate::objlock::LockSpec,
+    /// Body size announced by the client, to check the quota before reading it.
+    pub size_hint: Option<u64>,
+}
+
+/// Refuse, before receiving the data, a write of `add` bytes to `key` that
+/// cannot fit in the bucket quota. The authoritative check happens when the
+/// version is stored (`Store::put_version`).
+pub fn quota_precheck(app: &App, bm: &BucketMeta, key: &str, add: u64) -> Result<()> {
+    if bm.quota_bytes.is_none() && bm.quota_objects.is_none() {
+        return Ok(());
+    }
+    let stats = app.store.stats(&bm.name)?;
+    let mut dbytes = add as i64;
+    let exists = app.store.get_version(&bm.name, key, None)?.is_some_and(|v| !v.delete_marker);
+    if !bm.versioning_enabled()
+        && let Some(old) = app.store.get_version(&bm.name, key, Some(crate::storage::NULL_VERSION))?
+    {
+        dbytes -= old.size as i64; // replaced by the new data
+    }
+    crate::storage::check_quota(bm, &stats, if exists { 0 } else { 1 }, dbytes)
 }
 
 pub const DEFAULT_CONTENT_TYPE: &str = "application/octet-stream";
@@ -123,6 +143,9 @@ where
     check_key(key)?;
     let bm = app.store.bucket(bucket)?;
     crate::objlock::check_spec(&bm, &opts.lock)?;
+    if let Some(n) = opts.size_hint {
+        quota_precheck(app, &bm, key, n)?;
+    }
     let encrypt = opts.encrypt.unwrap_or(bm.encryption);
     let (blob, md5) = write_body(app, bucket, stream, payload, &opts, encrypt).await?;
     let mut v = ObjectVersion {

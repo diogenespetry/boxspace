@@ -169,6 +169,12 @@ pub async fn handle(State(app): State<Arc<App>>, ConnectInfo(peer): ConnectInfo<
     let bytes_out = if head { 0 } else { header(resp.headers(), "content-length").and_then(|v| v.parse().ok()).unwrap_or(0u64) };
     let elapsed = started.elapsed();
     app.metrics.record(op, status, elapsed.as_secs_f64(), bytes_in, bytes_out);
+    if let Some(b) = &target.0
+        && (access_key.is_some() || status < 400)
+        && error.as_deref() != Some("NoSuchBucket")
+    {
+        app.metrics.record_bucket(b, status, bytes_in, bytes_out);
+    }
     app.audit.log(audit::Entry {
         time: Utc::now(),
         request_id: rid,
@@ -609,6 +615,7 @@ fn put_opts(ctx: &Ctx<'_>) -> Result<PutOpts> {
         o.crc32 = ctx.h("x-amz-checksum-crc32").map(str::to_string);
     }
     o.decoded_len = ctx.h("x-amz-decoded-content-length").and_then(|v| v.parse().ok());
+    o.size_hint = o.decoded_len.or_else(|| ctx.h("content-length").and_then(|v| v.parse().ok()));
     Ok(o)
 }
 
@@ -1473,6 +1480,7 @@ async fn copy_object(ctx: &Ctx<'_>, b: &str, k: &str) -> Result<Response> {
             "This copy request is illegal because it is trying to copy an object to itself without changing the object's metadata, storage class, website redirect location or encryption attributes.",
         ));
     }
+    ops::quota_precheck(ctx.app, &dest, k, src.size)?;
     let encrypt = req.encrypt.unwrap_or(dest.encryption);
     let (blob, md5) = ops::copy_data(ctx.app, &sb, &src, None, b, encrypt).await?;
     let (content_type, meta, headers) = if directive == "REPLACE" {
@@ -1665,9 +1673,11 @@ async fn upload_part(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Resp
         .filter(|n| (1..=10000).contains(n))
         .ok_or_else(|| S3Error::invalid_argument("Part number must be an integer between 1 and 10000, inclusive"))?;
     ctx.authorize("s3:PutObject", b, Some(k))?;
-    ctx.app.store.bucket(b)?;
+    let bm = ctx.app.store.bucket(b)?;
     let up = upload_for(ctx, b, k)?;
     let copy = ctx.h("x-amz-copy-source").map(str::to_string);
+    // Parts already uploaded count toward the quota check of the next one.
+    let pending: u64 = up.parts.iter().filter(|(pn, _)| **pn != n).map(|(_, p)| p.size).sum();
     let (blob, md5) = if let Some(src) = &copy {
         let (sb, sk, svid) = parse_copy_source(src)?;
         let sv = copy_source_version(ctx, &sb, &sk, svid.as_deref())?;
@@ -1678,9 +1688,12 @@ async fn upload_part(ctx: &Ctx<'_>, b: &str, k: &str, body: Body) -> Result<Resp
             }
             None => None,
         };
+        let len = range.map(|(s, e)| e - s + 1).unwrap_or(sv.size);
+        ops::quota_precheck(ctx.app, &bm, k, pending + len)?;
         ops::copy_data(ctx.app, &sb, &sv, range, b, up.encrypt).await?
     } else {
         let opts = put_opts(ctx)?;
+        ops::quota_precheck(ctx.app, &bm, k, pending + opts.size_hint.unwrap_or(0))?;
         ops::write_body(ctx.app, b, stream(body), &ctx.auth.payload, &opts, up.encrypt).await?
     };
     let now = Utc::now();

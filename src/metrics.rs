@@ -21,8 +21,22 @@ struct Hist {
     count: u64,
 }
 
+/// Traffic of one bucket since the server started.
+#[derive(Default, Clone, Copy, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Traffic {
+    pub requests: u64,
+    pub errors: u64,
+    pub bytes_in: u64,
+    pub bytes_out: u64,
+}
+
+/// (metric name, help text, value)
+type Series = (&'static str, &'static str, fn(&Traffic) -> u64);
+
 pub struct Metrics {
     requests: Mutex<BTreeMap<(String, u16), u64>>,
+    traffic: Mutex<BTreeMap<String, Traffic>>,
     durations: Mutex<BTreeMap<String, Hist>>,
     bytes_in: AtomicU64,
     bytes_out: AtomicU64,
@@ -33,6 +47,7 @@ impl Default for Metrics {
     fn default() -> Self {
         Metrics {
             requests: Mutex::default(),
+            traffic: Mutex::default(),
             durations: Mutex::default(),
             bytes_in: AtomicU64::new(0),
             bytes_out: AtomicU64::new(0),
@@ -61,6 +76,25 @@ impl Metrics {
         }
         self.bytes_in.fetch_add(bytes_in, Ordering::Relaxed);
         self.bytes_out.fetch_add(bytes_out, Ordering::Relaxed);
+    }
+
+    /// Count a request against a bucket. Callers only pass buckets that
+    /// exist or requests that were authenticated, so random names probed by
+    /// scanners do not create series.
+    pub fn record_bucket(&self, bucket: &str, status: u16, bytes_in: u64, bytes_out: u64) {
+        let mut t = self.traffic.lock().unwrap_or_else(|e| e.into_inner());
+        if t.len() >= 10_000 && !t.contains_key(bucket) {
+            return;
+        }
+        let e = t.entry(bucket.to_string()).or_default();
+        e.requests += 1;
+        e.errors += (status >= 400) as u64;
+        e.bytes_in += bytes_in;
+        e.bytes_out += bytes_out;
+    }
+
+    pub fn bucket_traffic(&self, bucket: &str) -> Traffic {
+        self.traffic.lock().unwrap_or_else(|e| e.into_inner()).get(bucket).copied().unwrap_or_default()
     }
 
     pub fn render(&self, app: &App) -> String {
@@ -109,6 +143,30 @@ impl Metrics {
         let _ = writeln!(o, "# HELP boxspace_bucket_bytes Logical bytes per bucket (all versions).\n# TYPE boxspace_bucket_bytes gauge");
         for (b, s) in &stats {
             let _ = writeln!(o, "boxspace_bucket_bytes{{bucket=\"{b}\"}} {}", s.bytes);
+        }
+        let _ = writeln!(o, "# HELP boxspace_bucket_quota_bytes Byte quota per bucket (only buckets with a quota).\n# TYPE boxspace_bucket_quota_bytes gauge");
+        for b in buckets.iter().filter(|b| b.quota_bytes.is_some()) {
+            let _ = writeln!(o, "boxspace_bucket_quota_bytes{{bucket=\"{}\"}} {}", label(&b.name), b.quota_bytes.unwrap_or(0));
+        }
+        let _ = writeln!(o, "# HELP boxspace_bucket_quota_objects Object quota per bucket (only buckets with a quota).\n# TYPE boxspace_bucket_quota_objects gauge");
+        for b in buckets.iter().filter(|b| b.quota_objects.is_some()) {
+            let _ = writeln!(o, "boxspace_bucket_quota_objects{{bucket=\"{}\"}} {}", label(&b.name), b.quota_objects.unwrap_or(0));
+        }
+        {
+            let mut traffic = self.traffic.lock().unwrap_or_else(|e| e.into_inner());
+            traffic.retain(|name, _| buckets.iter().any(|b| &b.name == name));
+            let series: [Series; 4] = [
+                ("boxspace_bucket_requests_total", "S3 API requests per bucket.", |t| t.requests),
+                ("boxspace_bucket_errors_total", "S3 API requests per bucket that ended in an error (4xx/5xx).", |t| t.errors),
+                ("boxspace_bucket_received_bytes_total", "Bytes received per bucket.", |t| t.bytes_in),
+                ("boxspace_bucket_sent_bytes_total", "Bytes sent per bucket.", |t| t.bytes_out),
+            ];
+            for (name, help, get) in series {
+                let _ = writeln!(o, "# HELP {name} {help}\n# TYPE {name} counter");
+                for (b, t) in traffic.iter() {
+                    let _ = writeln!(o, "{name}{{bucket=\"{}\"}} {}", label(b), get(t));
+                }
+            }
         }
 
         let _ = writeln!(o, "# HELP boxspace_disk_online 1 if the disk is online.\n# TYPE boxspace_disk_online gauge");

@@ -152,6 +152,33 @@ pub struct BucketMeta {
     /// Object Lock enabled (permanent; implies versioning stays enabled).
     pub object_lock: bool,
     pub lock_default: Option<crate::objlock::DefaultRetention>,
+    /// Limit on logical bytes stored (all versions). None = unlimited.
+    pub quota_bytes: Option<u64>,
+    /// Limit on current objects. None = unlimited.
+    pub quota_objects: Option<u64>,
+}
+
+pub fn quota_exceeded(what: &str) -> S3Error {
+    S3Error::new("QuotaExceeded", 403, format!("Bucket quota exceeded ({what})."))
+}
+
+/// Would adding `dobjects` objects and `dbytes` bytes break the bucket quota?
+/// Changes that do not grow usage are always allowed, so a bucket over its
+/// quota (e.g. after the quota was lowered) can still be cleaned up.
+pub fn check_quota(bm: &BucketMeta, s: &Stats, dobjects: i64, dbytes: i64) -> Result<()> {
+    if dbytes > 0
+        && let Some(q) = bm.quota_bytes
+        && s.bytes + dbytes > q as i64
+    {
+        return Err(quota_exceeded("bytes"));
+    }
+    if dobjects > 0
+        && let Some(q) = bm.quota_objects
+        && s.objects + dobjects > q as i64
+    {
+        return Err(quota_exceeded("objects"));
+    }
+    Ok(())
 }
 
 impl BucketMeta {
@@ -523,7 +550,11 @@ impl Store {
             let after = latest_live(&objs, bucket, &v.key)?;
             let dbytes = v.size as i64 - replaced.iter().map(|r| r.size as i64).sum::<i64>();
             let dversions = 1 - replaced.len() as i64;
-            adjust(&mut tx.open_table(STATS)?, bucket, after as i64 - before as i64, dversions, dbytes)?;
+            let dobjects = after as i64 - before as i64;
+            let mut stats = tx.open_table(STATS)?;
+            let cur = stats.get(bucket)?.map(|g| de::<Stats>(g.value())).transpose()?.unwrap_or_default();
+            check_quota(&bm, &cur, dobjects, dbytes)?;
+            adjust(&mut stats, bucket, dobjects, dversions, dbytes)?;
         }
         bump_seq(&tx, v.seq)?;
         tx.commit()?;
